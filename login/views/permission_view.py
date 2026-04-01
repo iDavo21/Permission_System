@@ -331,7 +331,9 @@ class PermissionView(ft.Container):
 
     def calcular_dias(self):
         if self.fecha_desde and self.fecha_hasta:
-            diff = (self.fecha_hasta - self.fecha_desde).days
+            desde = self.fecha_desde.replace(tzinfo=None) if self.fecha_desde.tzinfo else self.fecha_desde
+            hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
+            diff = (hasta - desde).days
             if diff < 0:
                 self.lbl_total_dias.value = "⚠ Fecha de vencimiento es anterior al inicio"
                 self.lbl_total_dias.color = ft.Colors.RED_700
