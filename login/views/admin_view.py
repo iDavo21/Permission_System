@@ -1,256 +1,81 @@
 import flet as ft
-from datetime import datetime, timedelta
+import asyncio
+from datetime import datetime
+from utils.estado_utils import obtener_estado, fecha_a_datetime, obtener_estado_urgencia, contar_expiracion_proxima, nombre_completo
+from utils.constants import FECHA_FORMAT, TIPOS_PERMISO, DIAS_EXPIRACION_PRONTO
+from views.components import TopBar, SummaryCards, FilterPanel, NotificationPanel, PermisosTable, PaginationBar
 
 
 class AdminView(ft.Stack):
-    def __init__(self, on_add_permission=None, lista_permisos=None, on_edit=None, on_delete=None):
+    def __init__(self, on_add_permission=None, lista_permisos=None, on_edit=None, on_delete=None, on_view_detail=None, on_logout=None, usuario=None, on_export=None, on_backup=None, on_change_password=None):
         super().__init__()
         self.expand = True
 
         self.on_edit = on_edit
         self.on_delete = on_delete
+        self.on_view_detail = on_view_detail
+        self.on_logout = on_logout
+        self.usuario = usuario
+        self._on_export = on_export
+        self._on_backup = on_backup
+        self._on_change_password = on_change_password
 
         self.todos_los_permisos = lista_permisos or []
         self.permisos_filtrados = list(self.todos_los_permisos)
 
-        tipos = sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")))
+        self.pagina_actual = 1
+        self.registros_por_pagina = 10
 
-        # ── MENÚ ───────────────────────────────────────────────────────────────
-        menu_opciones = ft.PopupMenuButton(
-            icon=ft.Icons.MENU,
-            icon_color=ft.Colors.WHITE,
-            items=[
-                ft.PopupMenuItem(
-                    content=ft.Text("Agregar Permiso"),
-                    icon=ft.Icons.PERSON_ADD,
-                    on_click=lambda e: on_add_permission() if on_add_permission else None
-                ),
-                ft.PopupMenuItem(
-                    content=ft.Text("Ver Solicitudes"),
-                    icon=ft.Icons.ASSIGNMENT,
-                    on_click=lambda e: print("Navegar a Solicitudes")
-                ),
-            ]
-        )
-
-        # ── BUSCADOR ───────────────────────────────────────────────────────────
-        self.buscador = ft.TextField(
-            hint_text="Buscar por nombre o cédula...",
-            hint_style=ft.TextStyle(color=ft.Colors.WHITE54),
-            width=280,
-            height=40,
-            bgcolor=ft.Colors.WHITE24,
-            color=ft.Colors.WHITE,
-            border_color=ft.Colors.TRANSPARENT,
-            border_radius=15,
-            content_padding=ft.padding.only(left=15, right=15),
-            text_size=15,
-            prefix=ft.Icon(ft.Icons.SEARCH, color=ft.Colors.WHITE, size=20),
-            cursor_color=ft.Colors.WHITE,
-            on_change=lambda e: self.aplicar_filtros(),
-        )
-
-        # ── FILTROS ────────────────────────────────────────────────────────────
-        self.filtro_tipo = ft.Dropdown(
-            label="Tipo",
-            width=196,
-            height=35,
-            text_size=11,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(t) for t in tipos],
-            value="Todos",
-            bgcolor=ft.Colors.WHITE24,
-            border_color=ft.Colors.TRANSPARENT,
-            border_radius=8,
-            text_style=ft.TextStyle(color=ft.Colors.WHITE),
-        )
-
-        self.filtro_estado = ft.Dropdown(
-            label="Estado",
-            width=196,
-            height=35,
-            text_size=11,
-            options=[
-                ft.dropdown.Option("Todos"),
-                ft.dropdown.Option("Vigente"),
-                ft.dropdown.Option("Por Expirar"),
-                ft.dropdown.Option("Expirado"),
-            ],
-            value="Todos",
-            bgcolor=ft.Colors.WHITE24,
-            border_color=ft.Colors.TRANSPARENT,
-            border_radius=8,
-            text_style=ft.TextStyle(color=ft.Colors.WHITE),
-        )
-
-        self.filtro_fecha_desde = ft.TextField(
-            label="Desde",
-            width=165,
-            height=35,
-            text_size=11,
-            read_only=True,
-            hint_text="DD/MM/AAAA",
-            hint_style=ft.TextStyle(color=ft.Colors.WHITE54),
-            bgcolor=ft.Colors.WHITE24,
-            color=ft.Colors.WHITE,
-            border_color=ft.Colors.TRANSPARENT,
-            border_radius=8,
-            label_style=ft.TextStyle(color=ft.Colors.WHITE70),
-        )
-        self.btn_fecha_desde = ft.IconButton(
-            icon=ft.Icons.CALENDAR_TODAY,
-            icon_color=ft.Colors.WHITE,
-            icon_size=16,
-            tooltip="Desde",
-            on_click=self.abrir_calendario_desde_filtro,
-        )
-        self.dp_filtro_desde = ft.DatePicker(
-            first_date=datetime(2000, 1, 1),
-            last_date=datetime(2050, 12, 31),
-            on_change=self.cambio_filtro_desde,
-        )
-
-        self.filtro_fecha_hasta = ft.TextField(
-            label="Hasta",
-            width=165,
-            height=35,
-            text_size=11,
-            read_only=True,
-            hint_text="DD/MM/AAAA",
-            hint_style=ft.TextStyle(color=ft.Colors.WHITE54),
-            bgcolor=ft.Colors.WHITE24,
-            color=ft.Colors.WHITE,
-            border_color=ft.Colors.TRANSPARENT,
-            border_radius=8,
-            label_style=ft.TextStyle(color=ft.Colors.WHITE70),
-        )
-        self.btn_fecha_hasta = ft.IconButton(
-            icon=ft.Icons.CALENDAR_TODAY,
-            icon_color=ft.Colors.WHITE,
-            icon_size=16,
-            tooltip="Hasta",
-            on_click=self.abrir_calendario_hasta_filtro,
-        )
-        self.dp_filtro_hasta = ft.DatePicker(
-            first_date=datetime(2000, 1, 1),
-            last_date=datetime(2050, 12, 31),
-            on_change=self.cambio_filtro_hasta,
-        )
-
-        self.fecha_filtro_desde = None
-        self.fecha_filtro_hasta = None
-
-        btn_aplicar = ft.IconButton(
-            icon=ft.Icons.CHECK_CIRCLE,
-            icon_color=ft.Colors.GREEN_300,
-            icon_size=20,
-            tooltip="Aplicar filtros",
-            on_click=lambda e: self.aplicar_filtros(),
-        )
-
-        btn_limpiar = ft.IconButton(
-            icon=ft.Icons.FILTER_ALT_OFF,
-            icon_color=ft.Colors.AMBER_300,
-            icon_size=20,
-            tooltip="Limpiar filtros",
-            on_click=lambda e: self.limpiar_filtros(),
-        )
-
-        # ── PANEL PLEGABLE DE FILTROS (OVERLAY) ─────────────────────────────────
         self.filtros_abiertos = False
+        self.notificaciones_abiertas = False
+        self.menu_abierto = False
 
-        btn_cerrar_filtros = ft.IconButton(
-            icon=ft.Icons.CLOSE,
-            icon_color=ft.Colors.WHITE70,
-            icon_size=16,
-            tooltip="Cerrar",
-            on_click=lambda e: self.toggle_filtros(e),
+        notif_count = self._contar_notificaciones()
+
+        self._filter_panel = FilterPanel(
+            on_apply=self.aplicar_filtros,
+            on_close=lambda: self.toggle_filtros(None),
+            tipos_permiso=sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO),
         )
 
-        self.panel_filtros = ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Icon(ft.Icons.FILTER_LIST, color=ft.Colors.GREEN_300, size=16),
-                    ft.Text("Filtros", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_300),
-                    btn_cerrar_filtros,
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                self.filtro_tipo,
-                self.filtro_estado,
-                ft.Row([self.filtro_fecha_desde, self.btn_fecha_desde], spacing=0),
-                ft.Row([self.filtro_fecha_hasta, self.btn_fecha_hasta], spacing=0),
-                ft.Row([btn_aplicar, btn_limpiar], spacing=5, alignment=ft.MainAxisAlignment.END),
-            ], spacing=6),
-            bgcolor=ft.Colors.GREEN_800,
-            border=ft.border.all(1, ft.Colors.GREEN_600),
-            border_radius=10,
-            padding=12,
-            width=220,
-            shadow=ft.BoxShadow(blur_radius=15, spread_radius=2, color=ft.Colors.BLACK54),
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
+        self._notif_panel = NotificationPanel(
+            permisos=self.todos_los_permisos,
+            on_view_detail=self.on_view_detail,
+            on_mark_read=self._marcar_notif_leida,
+            on_filter_by_notif=self._filtrar_por_notif,
+            on_close=lambda: self.toggle_notificaciones(None),
         )
 
-        # ── BOTÓN TOGGLE FILTROS ───────────────────────────────────────────────
-        self.btn_toggle_filtros = ft.IconButton(
-            icon=ft.Icons.FILTER_LIST,
-            icon_color=ft.Colors.WHITE,
-            icon_size=22,
-            tooltip="Mostrar filtros",
-            on_click=self.toggle_filtros,
+        self._top_bar = TopBar(
+            on_search=self._on_search,
+            on_toggle_filters=self.toggle_filtros,
+            on_add_permission=on_add_permission,
+            on_confirm_logout=self.confirmar_logout,
+            on_toggle_notifications=self.toggle_notificaciones,
+            notification_count=notif_count,
+            usuario=usuario,
+            on_open_export=self._abrir_export_dialog,
+            on_backup=self._crear_backup,
+            on_change_password=self._abrir_cambio_password,
         )
 
-        # ── BARRA SUPERIOR ─────────────────────────────────────────────────────
-        barra_superior = ft.Container(
-            content=ft.Row([
-                ft.Container(
-                    content=ft.Text("Panel de Administrador", size=24, weight="bold", color=ft.Colors.WHITE),
-                    padding=ft.padding.only(left=15)
-                ),
-                ft.Row([
-                    self.buscador,
-                    self.btn_toggle_filtros,
-                    menu_opciones,
-                ], spacing=5, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            padding=ft.padding.all(15),
-            bgcolor=ft.Colors.GREEN_800,
-            border=ft.border.all(2, ft.Colors.GREEN_900),
-            border_radius=10,
-            offset=ft.Offset(0, -0.5),
-            animate_offset=ft.Animation(400, ft.AnimationCurve.EASE_OUT),
-            opacity=0,
-            animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_IN),
+        self._summary = SummaryCards(permisos=self.todos_los_permisos)
+
+        self._table = PermisosTable(
+            permisos=self.permisos_filtrados,
+            on_edit=self.on_edit,
+            on_delete_confirm=self.confirmar_eliminacion,
+            on_view_detail=self.on_view_detail,
         )
 
-        # ── TABLA ──────────────────────────────────────────────────────────────
-        self.tabla = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Nombre Completo", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Jerarquía", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Tipo de Permiso", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Inicio", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Vencimiento", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Estado", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-                ft.DataColumn(ft.Text("Acciones", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=13)),
-            ],
-            rows=[],
-            border_radius=10,
-            column_spacing=25,
-            heading_row_color=ft.Colors.GREEN_800,
-            heading_row_height=50,
-            data_row_min_height=48,
-            data_row_max_height=60,
-            divider_thickness=1,
+        self._pagination = PaginationBar(
+            on_change_page=self.cambiar_pagina,
+            on_change_ppp=self.cambiar_registros_pagina,
         )
 
         self.lbl_titulo = ft.Text(
             f"Permisos Registrados  ({len(self.todos_los_permisos)})",
             size=17, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE
-        )
-
-        self.tabla_container = ft.Container(
-            content=self.tabla,
-            border_radius=12,
-            border=ft.border.all(1, ft.Colors.GREEN_200),
-            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         )
 
         self.mensaje_vacio = ft.Column(
@@ -263,21 +88,18 @@ class AdminView(ft.Stack):
             visible=False,
         )
 
-        self.actualizar_tabla(self.permisos_filtrados)
-
-        # ── PANELES DE RESUMEN ─────────────────────────────────────────────────
-        panel_totales, panel_por_expirar, panel_expirados = self._crear_paneles()
-
-        fila_paneles = ft.Row(
-            controls=[panel_totales, panel_por_expirar, panel_expirados],
-            spacing=20,
-            alignment=ft.MainAxisAlignment.CENTER,
+        self.tabla_container = ft.Container(
+            content=self._table,
+            border_radius=12,
+            border=ft.border.all(1, ft.Colors.GREEN_200),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
         )
 
         cuerpo = ft.Column(
             controls=[
                 self.lbl_titulo,
                 self.tabla_container,
+                self._pagination,
                 self.mensaje_vacio,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.START,
@@ -285,7 +107,7 @@ class AdminView(ft.Stack):
             scroll=ft.ScrollMode.AUTO,
         )
 
-        contenido_animado = ft.Container(
+        self._contenido = ft.Container(
             content=cuerpo,
             padding=ft.padding.all(25),
             expand=True,
@@ -295,54 +117,181 @@ class AdminView(ft.Stack):
             animate_opacity=ft.Animation(500, ft.AnimationCurve.EASE_IN),
         )
 
-        columna_principal = ft.Column(
-            controls=[barra_superior, fila_paneles, contenido_animado],
-            expand=True,
-        )
-
         self._panel_filtros_flotante = ft.Container(
-            content=self.panel_filtros,
+            content=self._filter_panel,
             right=20,
             top=55,
+            opacity=0,
+            animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
+            visible=False,
         )
 
-        self.controls = [columna_principal]
+        self._panel_notif_flotante = ft.Container(
+            content=self._notif_panel,
+            right=60,
+            top=55,
+            opacity=0,
+            animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
+            visible=False,
+        )
 
-        self._barra = barra_superior
-        self._panel_totales = panel_totales
-        self._panel_por_expirar = panel_por_expirar
-        self._panel_expirados = panel_expirados
-        self._contenido = contenido_animado
+        self._panel_menu_flotante = ft.Container(
+            content=self._top_bar._panel_menu,
+            right=140,
+            top=55,
+            opacity=0,
+            animate_opacity=ft.Animation(150, ft.AnimationCurve.EASE_IN),
+            visible=False,
+        )
 
-    # ── TOGGLE FILTROS ────────────────────────────────────────────────────────
+        self._top_bar.btn_menu.on_click = self.toggle_menu
 
-    def toggle_filtros(self, e):
-        self.filtros_abiertos = not self.filtros_abiertos
-        if self.filtros_abiertos:
-            self.btn_toggle_filtros.icon = ft.Icons.FILTER_LIST_OFF
-            self.btn_toggle_filtros.tooltip = "Ocultar filtros"
-            self.btn_toggle_filtros.icon_color = ft.Colors.AMBER_300
-            self.controls.append(self._panel_filtros_flotante)
-        else:
-            self.btn_toggle_filtros.icon = ft.Icons.FILTER_LIST
-            self.btn_toggle_filtros.tooltip = "Mostrar filtros"
-            self.btn_toggle_filtros.icon_color = ft.Colors.WHITE
-            if self._panel_filtros_flotante in self.controls:
-                self.controls.remove(self._panel_filtros_flotante)
-        try:
-            if self.page:
+        self.controls = [
+            ft.Column([
+                self._top_bar,
+                self._summary,
+                self._contenido,
+            ], expand=True),
+            self._panel_filtros_flotante,
+            self._panel_notif_flotante,
+            self._panel_menu_flotante,
+        ]
+
+        self._export_pendiente = None
+
+        self.actualizar_tabla(self.permisos_filtrados)
+
+    def did_mount(self):
+        if self.page:
+            self._filter_panel.set_page(self.page)
+
+        async def animate():
+            try:
+                await asyncio.sleep(0.05)
+                self._top_bar.opacity = 1
+                self._top_bar.offset = ft.Offset(0, 0)
+                for card in self._summary.controls:
+                    card.opacity = 1
+                    card.offset = ft.Offset(0, 0)
+                self._contenido.opacity = 1
+                self._contenido.offset = ft.Offset(0, 0)
                 self.page.update()
+
+                if self._notif_panel.get_count() > 0:
+                    await asyncio.sleep(0.6)
+                    total = self._notif_panel.get_count()
+                    snack = ft.SnackBar(
+                        content=ft.Text(
+                            "%d permiso%s vence%s en los proximos 3 dias" % (total, "s" if total > 1 else "", "n" if total > 1 else "")
+                        ),
+                        bgcolor=ft.Colors.AMBER_800,
+                        duration=4000,
+                    )
+                    self.page.overlay.append(snack)
+                    snack.open = True
+                    self.page.update()
+            except Exception:
+                pass
+
+        task = asyncio.create_task(animate())
+        task.add_done_callback(lambda t: t.exception() if t.exception() else None)
+
+    def _contar_notificaciones(self):
+        return contar_expiracion_proxima(self.todos_los_permisos)
+
+    def _actualizar_ui(self, *controles):
+        if not self.page:
+            return
+        try:
+            for c in controles:
+                c.update()
         except RuntimeError:
             pass
 
-    # ── MÉTODOS DE FILTRADO ───────────────────────────────────────────────────
+    def _cerrar_paneles(self):
+        cambios = []
+        if self.notificaciones_abiertas:
+            self.notificaciones_abiertas = False
+            self._top_bar.btn_notificaciones.controls[0].icon = ft.Icons.NOTIFICATIONS_OUTLINED
+            self._panel_notif_flotante.visible = False
+            self._panel_notif_flotante.opacity = 0
+            cambios += [self._top_bar.btn_notificaciones, self._panel_notif_flotante]
+        if self.filtros_abiertos:
+            self.filtros_abiertos = False
+            self._top_bar.btn_toggle_filtros.icon = ft.Icons.FILTER_LIST
+            self._top_bar.btn_toggle_filtros.tooltip = "Mostrar filtros"
+            self._top_bar.btn_toggle_filtros.icon_color = ft.Colors.WHITE
+            self._panel_filtros_flotante.visible = False
+            self._panel_filtros_flotante.opacity = 0
+            cambios += [self._top_bar.btn_toggle_filtros, self._panel_filtros_flotante]
+        if self.menu_abierto:
+            self.menu_abierto = False
+            self._top_bar.btn_menu.icon = ft.Icons.MENU
+            self._top_bar.btn_menu.tooltip = "Menu"
+            self._top_bar.btn_menu.icon_color = ft.Colors.WHITE
+            self._panel_menu_flotante.visible = False
+            self._panel_menu_flotante.opacity = 0
+            cambios += [self._top_bar.btn_menu, self._panel_menu_flotante]
+        self._actualizar_ui(*cambios)
 
-    def aplicar_filtros(self):
-        texto = (self.buscador.value or "").strip().lower()
-        tipo = self.filtro_tipo.value
-        estado = self.filtro_estado.value
-        hoy = datetime.now().date()
-        manana = hoy + timedelta(days=1)
+    def toggle_filtros(self, e):
+        if self.filtros_abiertos:
+            self.filtros_abiertos = False
+            self._top_bar.btn_toggle_filtros.icon = ft.Icons.FILTER_LIST
+            self._top_bar.btn_toggle_filtros.tooltip = "Mostrar filtros"
+            self._top_bar.btn_toggle_filtros.icon_color = ft.Colors.WHITE
+            self._panel_filtros_flotante.visible = False
+            self._panel_filtros_flotante.opacity = 0
+        else:
+            self._cerrar_paneles()
+            self.filtros_abiertos = True
+            self._top_bar.btn_toggle_filtros.icon = ft.Icons.FILTER_LIST_OFF
+            self._top_bar.btn_toggle_filtros.tooltip = "Ocultar filtros"
+            self._top_bar.btn_toggle_filtros.icon_color = ft.Colors.AMBER_300
+            self._panel_filtros_flotante.visible = True
+            self._panel_filtros_flotante.opacity = 1
+        self._actualizar_ui(self._top_bar.btn_toggle_filtros, self._panel_filtros_flotante)
+
+    def toggle_notificaciones(self, e):
+        if self.notificaciones_abiertas:
+            self.notificaciones_abiertas = False
+            self._top_bar.btn_notificaciones.controls[0].icon = ft.Icons.NOTIFICATIONS_OUTLINED
+            self._panel_notif_flotante.visible = False
+            self._panel_notif_flotante.opacity = 0
+        else:
+            self._cerrar_paneles()
+            self.notificaciones_abiertas = True
+            self._top_bar.btn_notificaciones.controls[0].icon = ft.Icons.NOTIFICATIONS
+            self._panel_notif_flotante.visible = True
+            self._panel_notif_flotante.opacity = 1
+        self._actualizar_ui(self._top_bar.btn_notificaciones, self._panel_notif_flotante)
+
+    def toggle_menu(self, e):
+        if self.menu_abierto:
+            self.menu_abierto = False
+            self._top_bar.btn_menu.icon = ft.Icons.MENU
+            self._top_bar.btn_menu.tooltip = "Menu"
+            self._top_bar.btn_menu.icon_color = ft.Colors.WHITE
+            self._panel_menu_flotante.visible = False
+            self._panel_menu_flotante.opacity = 0
+        else:
+            self._cerrar_paneles()
+            self.menu_abierto = True
+            self._top_bar.btn_menu.icon = ft.Icons.CLOSE
+            self._top_bar.btn_menu.tooltip = "Cerrar menu"
+            self._top_bar.btn_menu.icon_color = ft.Colors.AMBER_300
+            self._panel_menu_flotante.visible = True
+            self._panel_menu_flotante.opacity = 1
+        self._actualizar_ui(self._top_bar.btn_menu, self._panel_menu_flotante)
+
+    def _on_search(self, texto):
+        self.aplicar_filtros(texto_busqueda=texto)
+
+    def aplicar_filtros(self, texto_busqueda=None):
+        texto = (texto_busqueda if texto_busqueda is not None else (self._top_bar.buscador.value or "")).strip().lower()
+        filtros = self._filter_panel.get_filtros()
+        tipo = filtros["tipo"]
+        estado = filtros["estado"]
 
         resultado = []
         for p in self.todos_los_permisos:
@@ -357,51 +306,29 @@ class AdminView(ft.Stack):
                     continue
 
             if estado and estado != "Todos":
-                fecha_hasta_str = p.get("fecha_hasta", "")
-                if not fecha_hasta_str:
-                    continue
-                try:
-                    fecha_hasta = datetime.strptime(fecha_hasta_str, "%d/%m/%Y").date()
-                    if estado == "Expirado" and fecha_hasta >= hoy:
-                        continue
-                    if estado == "Por Expirar" and fecha_hasta != manana:
-                        continue
-                    if estado == "Vigente" and fecha_hasta <= hoy:
-                        continue
-                except ValueError:
+                estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
+                if estado_texto != estado:
                     continue
 
-            fecha_desde_permiso = p.get("fecha_desde", "")
-            if self.fecha_filtro_desde and fecha_desde_permiso:
-                try:
-                    fd = datetime.strptime(fecha_desde_permiso, "%d/%m/%Y").date()
-                    if fd < self.fecha_filtro_desde:
-                        continue
-                except ValueError:
-                    pass
-
-            if self.fecha_filtro_hasta and fecha_desde_permiso:
-                try:
-                    fd = datetime.strptime(fecha_desde_permiso, "%d/%m/%Y").date()
-                    if fd > self.fecha_filtro_hasta:
-                        continue
-                except ValueError:
-                    pass
+            fd = fecha_a_datetime(p.get("fecha_desde", ""))
+            if filtros["fecha_desde"] and fd:
+                if fd < filtros["fecha_desde"]:
+                    continue
+            if filtros["fecha_hasta"] and fd:
+                if fd > filtros["fecha_hasta"]:
+                    continue
 
             resultado.append(p)
 
         self.permisos_filtrados = resultado
+        self.pagina_actual = 1
         self.actualizar_tabla(resultado)
 
     def limpiar_filtros(self):
-        self.buscador.value = ""
-        self.filtro_tipo.value = "Todos"
-        self.filtro_estado.value = "Todos"
-        self.filtro_fecha_desde.value = ""
-        self.filtro_fecha_hasta.value = ""
-        self.fecha_filtro_desde = None
-        self.fecha_filtro_hasta = None
+        self._top_bar.buscador.value = ""
+        self._filter_panel.limpiar_filtros()
         self.permisos_filtrados = list(self.todos_los_permisos)
+        self.pagina_actual = 1
         self.actualizar_tabla(self.todos_los_permisos)
         try:
             if self.page:
@@ -409,228 +336,51 @@ class AdminView(ft.Stack):
         except RuntimeError:
             pass
 
-    # ── ACTUALIZAR TABLA ──────────────────────────────────────────────────────
+    def cambiar_pagina(self, delta):
+        total_registros = len(self.permisos_filtrados)
+        total_paginas = max(1, (total_registros + self.registros_por_pagina - 1) // self.registros_por_pagina)
+        nueva_pagina = self.pagina_actual + delta
+        if 1 <= nueva_pagina <= total_paginas:
+            self.pagina_actual = nueva_pagina
+
+        self.actualizar_tabla(self.permisos_filtrados)
+
+    def cambiar_registros_pagina(self):
+        self.registros_por_pagina = self._pagination.get_ppp()
+        self.pagina_actual = 1
+        self.actualizar_tabla(self.permisos_filtrados)
 
     def actualizar_tabla(self, permisos):
-        hoy = datetime.now().date()
+        total_registros = len(permisos)
+        total_paginas = max(1, (total_registros + self.registros_por_pagina - 1) // self.registros_por_pagina)
+        self.pagina_actual = max(1, min(self.pagina_actual, total_paginas))
 
-        def obtener_estado(p):
-            fecha_hasta_str = p.get("fecha_hasta", "")
-            if not fecha_hasta_str:
-                return "Sin fecha", ft.Colors.GREY
-            try:
-                fecha_hasta = datetime.strptime(fecha_hasta_str, "%d/%m/%Y").date()
-                diff = (fecha_hasta - hoy).days
-                if diff < 0:
-                    return "Expirado", ft.Colors.RED
-                elif diff == 0:
-                    return "Expira hoy", ft.Colors.ORANGE
-                elif diff == 1:
-                    return "Por Expirar", ft.Colors.AMBER
-                else:
-                    return "Vigente", ft.Colors.GREEN
-            except ValueError:
-                return "—", ft.Colors.GREY
+        inicio = (self.pagina_actual - 1) * self.registros_por_pagina
+        fin = inicio + self.registros_por_pagina
+        pagina_permisos = permisos[inicio:fin]
 
-        filas = []
-        for p in permisos:
-            estado_texto, estado_color = obtener_estado(p)
-            filas.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text(
-                            f"{p.get('nombres', '')} {p.get('apellidos', '')}",
-                            size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500
-                        )),
-                        ft.DataCell(ft.Text(
-                            p.get('grado_jerarquia', ''),
-                            size=13, color=ft.Colors.WHITE
-                        )),
-                        ft.DataCell(ft.Container(
-                            content=ft.Text(p.get('tipo_permiso', ''), size=12, color=ft.Colors.BLUE_800),
-                            bgcolor=ft.Colors.BLUE_50,
-                            border_radius=6,
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                        )),
-                        ft.DataCell(ft.Container(
-                            content=ft.Text(p.get("fecha_desde", ""), size=13, color=ft.Colors.GREEN_800),
-                            bgcolor=ft.Colors.GREEN_50,
-                            border_radius=6,
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                        )),
-                        ft.DataCell(ft.Container(
-                            content=ft.Text(p.get("fecha_hasta", ""), size=13, color=ft.Colors.RED_800),
-                            bgcolor=ft.Colors.RED_50,
-                            border_radius=6,
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                        )),
-                        ft.DataCell(ft.Container(
-                            content=ft.Text(estado_texto, size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
-                            bgcolor=estado_color,
-                            border_radius=6,
-                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
-                        )),
-                        ft.DataCell(
-                            ft.Row([
-                                ft.IconButton(
-                                    icon=ft.Icons.EDIT_OUTLINED,
-                                    icon_color=ft.Colors.BLUE_700,
-                                    icon_size=20,
-                                    tooltip="Editar",
-                                    on_click=lambda e, pid=p.get('id'): self.on_edit(pid) if self.on_edit else None
-                                ),
-                                ft.IconButton(
-                                    icon=ft.Icons.DELETE_OUTLINE,
-                                    icon_color=ft.Colors.RED_700,
-                                    icon_size=20,
-                                    tooltip="Eliminar",
-                                    on_click=lambda e, pid=p.get('id'): self.confirmar_eliminacion(pid)
-                                ),
-                            ], spacing=0)
-                        ),
-                    ],
-                    color={ft.ControlState.HOVERED: ft.Colors.GREEN_50}
-                )
-            )
+        permisos_ordenados = self._table.get_sorted(pagina_permisos)
+        filas = self._table.render_filas(permisos_ordenados, inicio)
+        self._table.tabla.rows = filas
 
-        self.tabla.rows = filas
+        self._pagination.actualizar(self.pagina_actual, total_paginas, total_registros)
 
         total = len(self.todos_los_permisos)
-        filtrados = len(permisos)
+        filtrados = total_registros
 
         if filtrados == total:
             self.lbl_titulo.value = f"Permisos Registrados  ({total})"
         else:
             self.lbl_titulo.value = f"Permisos Filtrados  ({filtrados} de {total})"
 
-        self.tabla_container.visible = len(permisos) > 0
-        self.mensaje_vacio.visible = len(permisos) == 0
+        self.tabla_container.visible = total_registros > 0
+        self.mensaje_vacio.visible = total_registros == 0
 
         try:
             if self.page:
                 self.page.update()
         except RuntimeError:
             pass
-
-    # ── CALENDARIOS DE FILTRO ─────────────────────────────────────────────────
-
-    def abrir_calendario_desde_filtro(self, e):
-        if self.dp_filtro_desde not in self.page.overlay:
-            self.page.overlay.append(self.dp_filtro_desde)
-        self.dp_filtro_desde.open = True
-        self.page.update()
-
-    def cambio_filtro_desde(self, e):
-        if self.dp_filtro_desde.value:
-            self.fecha_filtro_desde = self.dp_filtro_desde.value.replace(tzinfo=None).date()
-            self.filtro_fecha_desde.value = self.fecha_filtro_desde.strftime("%d/%m/%Y")
-            self.filtro_fecha_desde.update()
-            self.aplicar_filtros()
-
-    def abrir_calendario_hasta_filtro(self, e):
-        if self.dp_filtro_hasta not in self.page.overlay:
-            self.page.overlay.append(self.dp_filtro_hasta)
-        self.dp_filtro_hasta.open = True
-        self.page.update()
-
-    def cambio_filtro_hasta(self, e):
-        if self.dp_filtro_hasta.value:
-            self.fecha_filtro_hasta = self.dp_filtro_hasta.value.replace(tzinfo=None).date()
-            self.filtro_fecha_hasta.value = self.fecha_filtro_hasta.strftime("%d/%m/%Y")
-            self.filtro_fecha_hasta.update()
-            self.aplicar_filtros()
-
-    # ── PANELES DE RESUMEN ────────────────────────────────────────────────────
-
-    def _crear_paneles(self):
-        hoy = datetime.now().date()
-        manana = hoy + timedelta(days=1)
-
-        total_permisos = len(self.todos_los_permisos)
-        por_expirar = 0
-        expirados = 0
-
-        for p in self.todos_los_permisos:
-            fecha_hasta_str = p.get("fecha_hasta", "")
-            if fecha_hasta_str:
-                try:
-                    fecha_hasta = datetime.strptime(fecha_hasta_str, "%d/%m/%Y").date()
-                    if fecha_hasta == manana:
-                        por_expirar += 1
-                    elif fecha_hasta < hoy:
-                        expirados += 1
-                except ValueError:
-                    pass
-
-        panel_totales = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(ft.Icons.ASSIGNMENT_OUTLINED, size=22, color=ft.Colors.GREEN_300),
-                    ft.Text(str(total_permisos), size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    ft.Text("Permisos Totales", size=10, color=ft.Colors.GREEN_200),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            bgcolor=ft.Colors.GREEN_800,
-            border_radius=10,
-            padding=ft.padding.symmetric(vertical=12, horizontal=16),
-            expand=True,
-            alignment=ft.Alignment(0, 0),
-            border=ft.border.all(1, ft.Colors.GREEN_600),
-            offset=ft.Offset(0, 0.3),
-            animate_offset=ft.Animation(500, ft.AnimationCurve.EASE_OUT),
-            opacity=0,
-            animate_opacity=ft.Animation(500, ft.AnimationCurve.EASE_IN),
-        )
-
-        panel_por_expirar = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, size=22, color=ft.Colors.AMBER_300),
-                    ft.Text(str(por_expirar), size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    ft.Text("Por Expirar (1 día)", size=10, color=ft.Colors.AMBER_200),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            bgcolor=ft.Colors.AMBER_800,
-            border_radius=10,
-            padding=ft.padding.symmetric(vertical=12, horizontal=16),
-            expand=True,
-            alignment=ft.Alignment(0, 0),
-            border=ft.border.all(1, ft.Colors.AMBER_600),
-            offset=ft.Offset(0, 0.3),
-            animate_offset=ft.Animation(600, ft.AnimationCurve.EASE_OUT),
-            opacity=0,
-            animate_opacity=ft.Animation(600, ft.AnimationCurve.EASE_IN),
-        )
-
-        panel_expirados = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(ft.Icons.CANCEL_OUTLINED, size=22, color=ft.Colors.RED_300),
-                    ft.Text(str(expirados), size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
-                    ft.Text("Expirados", size=10, color=ft.Colors.RED_200),
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            bgcolor=ft.Colors.RED_800,
-            border_radius=10,
-            padding=ft.padding.symmetric(vertical=12, horizontal=16),
-            expand=True,
-            alignment=ft.Alignment(0, 0),
-            border=ft.border.all(1, ft.Colors.RED_600),
-            offset=ft.Offset(0, 0.3),
-            animate_offset=ft.Animation(700, ft.AnimationCurve.EASE_OUT),
-            opacity=0,
-            animate_opacity=ft.Animation(700, ft.AnimationCurve.EASE_IN),
-        )
-
-        return panel_totales, panel_por_expirar, panel_expirados
-
-    # ── CONFIRMAR ELIMINACIÓN ─────────────────────────────────────────────────
 
     def confirmar_eliminacion(self, permiso_id):
         def cerrar_dialogo(e):
@@ -644,8 +394,8 @@ class AdminView(ft.Stack):
             self.page.update()
 
         dialogo = ft.AlertDialog(
-            title=ft.Text("¿Confirmar eliminación?"),
-            content=ft.Text("Esta acción no se puede deshacer."),
+            title=ft.Text("Confirmar eliminacion"),
+            content=ft.Text("Esta accion no se puede deshacer."),
             actions=[
                 ft.TextButton("Cancelar", on_click=cerrar_dialogo),
                 ft.TextButton("Eliminar", on_click=eliminar_y_cerrar, style=ft.ButtonStyle(color=ft.Colors.RED)),
@@ -657,17 +407,93 @@ class AdminView(ft.Stack):
         dialogo.open = True
         self.page.update()
 
-    # ── ANIMACIONES AL MONTAR ─────────────────────────────────────────────────
+    def confirmar_logout(self):
+        def cerrar_dialogo(e):
+            dialogo.open = False
+            self.page.update()
 
-    def did_mount(self):
-        self._barra.opacity = 1
-        self._barra.offset = ft.Offset(0, 0)
-        self._panel_totales.opacity = 1
-        self._panel_totales.offset = ft.Offset(0, 0)
-        self._panel_por_expirar.opacity = 1
-        self._panel_por_expirar.offset = ft.Offset(0, 0)
-        self._panel_expirados.opacity = 1
-        self._panel_expirados.offset = ft.Offset(0, 0)
-        self._contenido.opacity = 1
-        self._contenido.offset = ft.Offset(0, 0)
+        def logout_y_cerrar(e):
+            dialogo.open = False
+            self.page.update()
+            if self.on_logout:
+                self.on_logout()
+
+        dialogo = ft.AlertDialog(
+            title=ft.Text("Cerrar sesion"),
+            content=ft.Text("Estas seguro de que deseas cerrar sesion?"),
+            actions=[
+                ft.TextButton("Cancelar", on_click=cerrar_dialogo),
+                ft.TextButton("Cerrar sesion", on_click=logout_y_cerrar, style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        self.page.overlay.append(dialogo)
+        dialogo.open = True
         self.page.update()
+
+    def _marcar_notif_leida(self):
+        self._notif_panel.marcar_leida()
+        self._top_bar.update_badge(0)
+        try:
+            if self.page:
+                self.page.update()
+        except RuntimeError:
+            pass
+
+    def _filtrar_por_notif(self, tipo):
+        hoy = datetime.now().date()
+
+        resultado = []
+        for p in self.todos_los_permisos:
+            fecha_hasta = fecha_a_datetime(p.get("fecha_hasta", ""))
+            if fecha_hasta:
+                diff = (fecha_hasta - hoy).days
+                if tipo == "hoy" and diff == 0:
+                    resultado.append(p)
+                elif tipo == "manana" and diff == 1:
+                    resultado.append(p)
+                elif tipo == "proximos" and 2 <= diff <= 3:
+                    resultado.append(p)
+
+        self._cerrar_paneles()
+        self._top_bar.buscador.value = ""
+        self._filter_panel.filtro_tipo.value = "Todos"
+        self._filter_panel.filtro_estado.value = "Todos"
+        self.permisos_filtrados = resultado
+        self.pagina_actual = 1
+        self.actualizar_tabla(resultado)
+
+    def refrescar_datos(self):
+        from models.permiso_model import PermisoModel
+        self.todos_los_permisos = PermisoModel.get_all()
+        self._summary.actualizar(self.todos_los_permisos)
+        self._notif_panel.actualizar_permisos(self.todos_los_permisos)
+        self._top_bar.update_badge(self._notif_panel.get_count())
+        self.aplicar_filtros()
+
+    def _abrir_export_dialog(self):
+        from views.components.export_dialog import ExportDialog
+        dialog = ExportDialog(
+            permisos=self.permisos_filtrados,
+            on_export=lambda template: self._ejecutar_export(template),
+            usuario=self.usuario,
+        )
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
+
+    def _ejecutar_export(self, template_key):
+        self._cerrar_paneles()
+        if hasattr(self, '_on_export'):
+            self._on_export(self.permisos_filtrados, template_key)
+
+    def _crear_backup(self):
+        self._cerrar_paneles()
+        if hasattr(self, '_on_backup'):
+            self._on_backup()
+
+    def _abrir_cambio_password(self):
+        self._cerrar_paneles()
+        if hasattr(self, '_on_change_password'):
+            self._on_change_password()

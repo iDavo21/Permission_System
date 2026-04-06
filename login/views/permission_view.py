@@ -1,5 +1,13 @@
 import flet as ft
+import asyncio
 from datetime import datetime
+from models.permiso_model import PermisoModel
+from utils.constants import (
+    CEDULA_MIN, CEDULA_MAX,
+    TELEFONO_MIN, TELEFONO_MAX,
+    FECHA_FORMAT, TIPOS_PERMISO,
+)
+from utils.estado_utils import fecha_a_datetime
 
 class PermissionView(ft.Container):
     def __init__(self, on_back, on_save=None, datos_iniciales=None, permiso_id=None):
@@ -21,11 +29,13 @@ class PermissionView(ft.Container):
 
         self.cedula = ft.TextField(
             label="Cédula*", icon=ft.Icons.BADGE,
-            expand=True, keyboard_type=ft.KeyboardType.NUMBER
+            expand=True, keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.NumbersOnlyInputFilter(),
         )
         self.telefono = ft.TextField(
             label="Teléfono*", icon=ft.Icons.PHONE,
-            expand=True, keyboard_type=ft.KeyboardType.PHONE
+            expand=True, keyboard_type=ft.KeyboardType.PHONE,
+            input_filter=ft.NumbersOnlyInputFilter(),
         )
 
         # ── SECCIÓN 2: Información Laboral ────────────────────────────────────
@@ -41,15 +51,7 @@ class PermissionView(ft.Container):
         self.tipo_permiso = ft.Dropdown(
             label="Tipo de Permiso*",
             width=W_FULL,
-            options=[
-                ft.dropdown.Option("Extraordinario"),
-                ft.dropdown.Option("Vacacional"),
-                ft.dropdown.Option("Pre Maternal"),
-                ft.dropdown.Option("Post Maternal"),
-                ft.dropdown.Option("Paternal"),
-                ft.dropdown.Option("Operacional"),
-                ft.dropdown.Option("Reposo"),
-            ]
+            options=[ft.dropdown.Option(t) for t in TIPOS_PERMISO]
         )
 
         # ── SECCIÓN 3: Fechas ─────────────────────────────────────────────────
@@ -104,7 +106,10 @@ class PermissionView(ft.Container):
         # Contenedores visuales para cada fecha — Apilados verticalmente para mayor claridad
         bloque_desde = ft.Container(
             content=ft.Column([
-                ft.Text("🟢 Inicio del Permiso", size=12, color=ft.Colors.GREEN_700, weight=ft.FontWeight.BOLD),
+                ft.Row([
+                    ft.Icon(ft.Icons.CIRCLE, color=ft.Colors.GREEN_700, size=10),
+                    ft.Text("Inicio del Permiso", size=12, color=ft.Colors.GREEN_700, weight=ft.FontWeight.BOLD),
+                ], spacing=6),
                 ft.Row([self.input_desde, self.btn_desde],
                        vertical_alignment=ft.CrossAxisAlignment.CENTER)
             ], tight=True, spacing=6),
@@ -116,7 +121,10 @@ class PermissionView(ft.Container):
         )
         bloque_hasta = ft.Container(
             content=ft.Column([
-                ft.Text("🔴 Vencimiento del Permiso", size=12, color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD),
+                ft.Row([
+                    ft.Icon(ft.Icons.CIRCLE, color=ft.Colors.RED_700, size=10),
+                    ft.Text("Vencimiento del Permiso", size=12, color=ft.Colors.RED_700, weight=ft.FontWeight.BOLD),
+                ], spacing=6),
                 ft.Row([self.input_hasta, self.btn_hasta],
                        vertical_alignment=ft.CrossAxisAlignment.CENTER)
             ], tight=True, spacing=6),
@@ -167,11 +175,12 @@ class PermissionView(ft.Container):
             
             # Parsear fechas para los objetos datetime
             try:
-                self.fecha_desde = datetime.strptime(self.input_desde.value, "%d/%m/%Y")
-                self.fecha_hasta = datetime.strptime(self.input_hasta.value, "%d/%m/%Y")
+                self.fecha_desde = datetime.strptime(self.input_desde.value, FECHA_FORMAT)
+                self.fecha_hasta = datetime.strptime(self.input_hasta.value, FECHA_FORMAT)
                 self.calcular_dias()
-            except:
-                pass
+            except ValueError:
+                self.fecha_desde = None
+                self.fecha_hasta = None
 
             self.dir_domiciliaria.value = datos_iniciales.get("dir_domiciliaria", "")
             self.dir_emergencia.value = datos_iniciales.get("dir_emergencia", "")
@@ -193,11 +202,17 @@ class PermissionView(ft.Container):
             width=W_FULL,
             on_click=self.guardar_permiso
         )
+        self._spinner = ft.ProgressRing(width=20, height=20, stroke_width=2, color=ft.Colors.WHITE, visible=False)
+        self.btn_guardar_wrapper = ft.Row(
+            [self.btn_guardar, self._spinner],
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=10,
+        )
         self.btn_volver = ft.TextButton(
             "Volver al Panel",
             icon=ft.Icons.ARROW_BACK,
             icon_color=ft.Colors.GREY_700,
-            on_click=lambda e: self.on_back()
+            on_click=self.volver_al_panel,
         )
 
         def seccion_titulo(texto, icono):
@@ -267,7 +282,7 @@ class PermissionView(ft.Container):
                 self.observaciones,
 
                 ft.Divider(color=ft.Colors.GREY_200),
-                self.btn_guardar,
+                self.btn_guardar_wrapper,
                 self.btn_volver,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -296,11 +311,82 @@ class PermissionView(ft.Container):
         )
         self.content = self._card_wrapper
 
+        # Guardar valores iniciales para detectar cambios
+        nombres = f"{self.primer_nombre.value} {self.segundo_nombre.value}".strip()
+        apellidos = f"{self.primer_apellido.value} {self.segundo_apellido.value}".strip()
+        self._valores_iniciales = {
+            "nombres": nombres,
+            "apellidos": apellidos,
+            "cedula": self.cedula.value,
+            "telefono": self.telefono.value,
+            "grado_jerarquia": self.grado_jerarquia.value,
+            "cargo": self.cargo.value,
+            "tipo_permiso": self.tipo_permiso.value,
+            "fecha_desde": self.input_desde.value,
+            "fecha_hasta": self.input_hasta.value,
+            "dir_domiciliaria": self.dir_domiciliaria.value,
+            "dir_emergencia": self.dir_emergencia.value,
+            "observaciones": self.observaciones.value,
+        }
+
     # ── CICLO DE VIDA ─────────────────────────────────────────────────────────
     def did_mount(self):
-        self._card_wrapper.opacity = 1
-        self._card_wrapper.offset = ft.Offset(0, 0)
-        self.update()
+        async def animate():
+            await asyncio.sleep(0.05)
+            self._card_wrapper.opacity = 1
+            self._card_wrapper.offset = ft.Offset(0, 0)
+            self.update()
+        asyncio.create_task(animate())
+
+    # ── VOLVER CON VERIFICACIÓN ───────────────────────────────────────────────
+    def _hay_cambios(self):
+        nombres = f"{self.primer_nombre.value} {self.segundo_nombre.value}".strip()
+        apellidos = f"{self.primer_apellido.value} {self.segundo_apellido.value}".strip()
+        actual = {
+            "nombres": nombres,
+            "apellidos": apellidos,
+            "cedula": self.cedula.value,
+            "telefono": self.telefono.value,
+            "grado_jerarquia": self.grado_jerarquia.value,
+            "cargo": self.cargo.value,
+            "tipo_permiso": self.tipo_permiso.value,
+            "fecha_desde": self.input_desde.value,
+            "fecha_hasta": self.input_hasta.value,
+            "dir_domiciliaria": self.dir_domiciliaria.value,
+            "dir_emergencia": self.dir_emergencia.value,
+            "observaciones": self.observaciones.value,
+        }
+        return actual != self._valores_iniciales
+
+    def volver_al_panel(self, e):
+        if self._hay_cambios():
+            self._mostrar_dialogo_salir()
+        else:
+            self.on_back()
+
+    def _mostrar_dialogo_salir(self):
+        def cerrar(e):
+            dlg.open = False
+            self.page.update()
+
+        def salir(e):
+            dlg.open = False
+            self.page.update()
+            self.on_back()
+
+        dlg = ft.AlertDialog(
+            title=ft.Text("⚠️ Cambios sin guardar"),
+            content=ft.Text("Tienes cambios que no se han guardado. ¿Seguro que deseas salir?"),
+            actions=[
+                ft.TextButton("Cancelar", on_click=cerrar),
+                ft.TextButton("Salir sin guardar", on_click=salir,
+                              style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
 
     # ── CALENDARIOS ──────────────────────────────────────────────────────────
     def abrir_calendario_desde(self, e):
@@ -318,14 +404,14 @@ class PermissionView(ft.Container):
     def cambio_desde(self, e):
         if self.dp_desde.value:
             self.fecha_desde = self.dp_desde.value
-            self.input_desde.value = self.fecha_desde.strftime("%d/%m/%Y")
+            self.input_desde.value = self.fecha_desde.strftime(FECHA_FORMAT)
             self.input_desde.update()
             self.calcular_dias()
 
     def cambio_hasta(self, e):
         if self.dp_hasta.value:
             self.fecha_hasta = self.dp_hasta.value
-            self.input_hasta.value = self.fecha_hasta.strftime("%d/%m/%Y")
+            self.input_hasta.value = self.fecha_hasta.strftime(FECHA_FORMAT)
             self.input_hasta.update()
             self.calcular_dias()
 
@@ -335,15 +421,24 @@ class PermissionView(ft.Container):
             hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
             diff = (hasta - desde).days
             if diff < 0:
-                self.lbl_total_dias.value = "⚠ Fecha de vencimiento es anterior al inicio"
+                self.lbl_total_dias.value = "Fecha de vencimiento es anterior al inicio"
                 self.lbl_total_dias.color = ft.Colors.RED_700
             else:
-                self.lbl_total_dias.value = f"📅 Días totales del permiso: {diff + 1}"
+                self.lbl_total_dias.value = f"Días totales del permiso: {diff + 1}"
                 self.lbl_total_dias.color = ft.Colors.BLUE_700
             self.lbl_total_dias.update()
 
     # ── GUARDAR ──────────────────────────────────────────────────────────────
+    def _reset_spinner(self):
+        self.btn_guardar.disabled = False
+        self._spinner.visible = False
+        self.update()
+
     def guardar_permiso(self, e):
+        self.btn_guardar.disabled = True
+        self._spinner.visible = True
+        self.update()
+
         campos_obligatorios = {
             "Primer Nombre": self.primer_nombre.value,
             "Primer Apellido": self.primer_apellido.value,
@@ -361,12 +456,74 @@ class PermissionView(ft.Container):
         vacios = [k for k, v in campos_obligatorios.items() if not v or not str(v).strip()]
         if vacios:
             snack = ft.SnackBar(
-                ft.Text(f"⚠️ Campo(s) obligatorio(s) vacío(s): {', '.join(vacios)}"),
-                bgcolor=ft.Colors.RED_700
+                ft.Text(f"Campo(s) obligatorio(s) vacío(s): {', '.join(vacios)}"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
             )
             self.page.overlay.append(snack)
             snack.open = True
-            self.page.update()
+            self._reset_spinner()
+            return
+
+        # Validar que cédula y teléfono solo contengan números
+        errores_num = []
+        if not self.cedula.value.isdigit():
+            errores_num.append("Cédula")
+        if not self.telefono.value.isdigit():
+            errores_num.append("Teléfono")
+        if errores_num:
+            snack = ft.SnackBar(
+                ft.Text(f"Solo se permiten números en: {', '.join(errores_num)}"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self._reset_spinner()
+            return
+
+        # Validar longitudes
+        errores_long = []
+        cedula_val = self.cedula.value.strip()
+        telefono_val = self.telefono.value.strip()
+        if cedula_val and (len(cedula_val) < CEDULA_MIN or len(cedula_val) > CEDULA_MAX):
+            errores_long.append(f"Cédula ({CEDULA_MIN}-{CEDULA_MAX} dígitos)")
+        if telefono_val and (len(telefono_val) < TELEFONO_MIN or len(telefono_val) > TELEFONO_MAX):
+            errores_long.append(f"Teléfono ({TELEFONO_MIN}-{TELEFONO_MAX} dígitos)")
+        if errores_long:
+            snack = ft.SnackBar(
+                ft.Text(f"Longitud inválida en: {', '.join(errores_long)}"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self._reset_spinner()
+            return
+
+        # Validar fechas (inicio <= vencimiento)
+        if self.fecha_desde and self.fecha_hasta:
+            if self.fecha_desde > self.fecha_hasta:
+                snack = ft.SnackBar(
+                    ft.Text("La fecha de inicio debe ser anterior al vencimiento"),
+                    bgcolor=ft.Colors.RED_700,
+                    duration=4000,
+                )
+                self.page.overlay.append(snack)
+                snack.open = True
+                self._reset_spinner()
+                return
+
+        # Validar cédula duplicada
+        if PermisoModel.existe_cedula(self.cedula.value, self.permiso_id):
+            snack = ft.SnackBar(
+                ft.Text(f"La cédula {self.cedula.value} ya está registrada"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+            )
+            self.page.overlay.append(snack)
+            snack.open = True
+            self._reset_spinner()
             return
 
         nombres  = f"{self.primer_nombre.value} {self.segundo_nombre.value}".strip()
@@ -389,7 +546,7 @@ class PermissionView(ft.Container):
         }
 
         success_msg = "¡Permiso actualizado con éxito!" if self.permiso_id else "¡Permiso registrado con éxito!"
-        snack = ft.SnackBar(ft.Text(f"✅ {success_msg}"), bgcolor=ft.Colors.GREEN_700)
+        snack = ft.SnackBar(ft.Text(success_msg), bgcolor=ft.Colors.GREEN_700, duration=4000)
         self.page.overlay.append(snack)
         snack.open = True
         self.page.update()

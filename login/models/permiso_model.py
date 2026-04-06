@@ -1,27 +1,30 @@
 import sqlite3
 import os
 
-# Ruta a la base de datos dentro de la carpeta data/
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'permisos.db')
+
 
 class PermisoModel:
     """Encapsula todas las operaciones CRUD sobre la tabla permisos en SQLite."""
 
     @staticmethod
     def _connect():
-        """Retorna una conexión a la base de datos."""
-        return sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
 
     @staticmethod
     def create_table():
-        """Crea la tabla si aún no existe."""
-        with PermisoModel._connect() as conn:
+        conn = PermisoModel._connect()
+        try:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS permisos (
                     id                INTEGER PRIMARY KEY AUTOINCREMENT,
                     nombres           TEXT NOT NULL,
                     apellidos         TEXT NOT NULL,
-                    cedula            TEXT NOT NULL,
+                    cedula            TEXT NOT NULL UNIQUE,
                     telefono          TEXT NOT NULL,
                     grado_jerarquia   TEXT,
                     cargo             TEXT,
@@ -34,12 +37,18 @@ class PermisoModel:
                     observaciones     TEXT
                 )
             """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_cedula ON permisos(cedula)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fecha_hasta ON permisos(fecha_hasta)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fecha_desde ON permisos(fecha_desde)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tipo ON permisos(tipo_permiso)")
             conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def save(datos: dict) -> int:
-        """Inserta un nuevo permiso. Retorna el ID generado."""
-        with PermisoModel._connect() as conn:
+        conn = PermisoModel._connect()
+        try:
             cursor = conn.execute("""
                 INSERT INTO permisos (
                     nombres, apellidos, cedula, telefono,
@@ -55,32 +64,36 @@ class PermisoModel:
             """, datos)
             conn.commit()
             return cursor.lastrowid
+        finally:
+            conn.close()
 
     @staticmethod
     def get_all() -> list:
-        """Retorna todos los permisos como lista de dicts."""
-        with PermisoModel._connect() as conn:
-            conn.row_factory = sqlite3.Row
+        conn = PermisoModel._connect()
+        try:
             rows = conn.execute(
                 "SELECT * FROM permisos ORDER BY id DESC"
             ).fetchall()
             return [dict(r) for r in rows]
+        finally:
+            conn.close()
 
     @staticmethod
     def get_by_id(permiso_id: int) -> dict:
-        """Retorna un permiso por su ID."""
-        with PermisoModel._connect() as conn:
-            conn.row_factory = sqlite3.Row
+        conn = PermisoModel._connect()
+        try:
             row = conn.execute(
                 "SELECT * FROM permisos WHERE id = ?", (permiso_id,)
             ).fetchone()
             return dict(row) if row else {}
+        finally:
+            conn.close()
 
     @staticmethod
     def update(permiso_id: int, datos: dict):
-        """Actualiza los campos de un permiso existente."""
         datos['id'] = permiso_id
-        with PermisoModel._connect() as conn:
+        conn = PermisoModel._connect()
+        try:
             conn.execute("""
                 UPDATE permisos SET
                     nombres           = :nombres,
@@ -99,10 +112,32 @@ class PermisoModel:
                 WHERE id = :id
             """, datos)
             conn.commit()
+        finally:
+            conn.close()
 
     @staticmethod
     def delete(permiso_id: int):
-        """Elimina un permiso por su ID."""
-        with PermisoModel._connect() as conn:
+        conn = PermisoModel._connect()
+        try:
             conn.execute("DELETE FROM permisos WHERE id = ?", (permiso_id,))
             conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def existe_cedula(cedula: str, excluir_id: int = None) -> bool:
+        conn = PermisoModel._connect()
+        try:
+            if excluir_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM permisos WHERE cedula = ? AND id != ?",
+                    (cedula, excluir_id)
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM permisos WHERE cedula = ?",
+                    (cedula,)
+                ).fetchone()
+            return row[0] > 0
+        finally:
+            conn.close()
