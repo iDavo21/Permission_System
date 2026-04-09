@@ -2,20 +2,41 @@ import flet as ft
 import asyncio
 from datetime import datetime
 from comisiones.models.comision_model import ComisionModel
+from personal.models.personal_model import PersonalModel
 from core.constants import FECHA_FORMAT, TIPOS_COMISION
 from core.theme import theme_colors
-
 
 class ComisionForm(ft.Container):
     def __init__(self, controller, personal_id=None, comision_id=None, on_save=None, on_back=None, dark_mode=True):
         super().__init__()
         self.expand = True
+        self.alignment = ft.Alignment.CENTER
         self.controller = controller
-        self.personal_id = personal_id
+        self.personal_id_inicial = personal_id
         self.comision_id = comision_id
         self.on_save = on_save
         self.on_back = on_back
         self.dark_mode = dark_mode
+
+        self.personal_seleccionados = []
+        self.modo_edicion = bool(comision_id)
+
+        if personal_id:
+            persona = PersonalModel.get_by_id(personal_id)
+            if persona:
+                self.personal_seleccionados.append(persona)
+
+        if self.modo_edicion and not self.personal_seleccionados:
+            datos_comision = ComisionModel.get_by_id(comision_id)
+            if datos_comision:
+                self.personal_seleccionados.append({
+                    "id": datos_comision.get("personal_id"),
+                    "nombres": datos_comision.get("nombres", ""),
+                    "apellidos": datos_comision.get("apellidos", ""),
+                    "cedula": datos_comision.get("cedula", ""),
+                    "grado_jerarquia": datos_comision.get("grado_jerarquia", ""),
+                    "cargo": datos_comision.get("cargo", ""),
+                })
 
         self._build_ui()
 
@@ -23,32 +44,36 @@ class ComisionForm(ft.Container):
         tc = theme_colors(self.dark_mode)
         W_FULL = 440
 
-        self.persona = None
-        if self.personal_id:
-            from personal.models.personal_model import PersonalModel
-            self.persona = PersonalModel.get_by_id(self.personal_id)
+        self.lbl_persona_resumen = ft.Text("Sin persona seleccionada", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+        self.lbl_persona_detalle = ft.Text("Seleccione al menos a una persona", size=13, color=tc["text_secondary"])
+        self.lbl_persona_extras = ft.Text("", size=13, color=tc["text_tertiary"], visible=False)
 
-        if self.comision_id and not self.persona:
-            datos_comision = ComisionModel.get_by_id(self.comision_id)
-            if datos_comision:
-                self.persona = {
-                    "id": datos_comision.get("personal_id"),
-                    "nombres": datos_comision.get("nombres", ""),
-                    "apellidos": datos_comision.get("apellidos", ""),
-                    "cedula": datos_comision.get("cedula", ""),
-                    "grado_jerarquia": datos_comision.get("grado_jerarquia", ""),
-                    "cargo": datos_comision.get("cargo", ""),
-                }
+        self.btn_seleccionar_personal = ft.ElevatedButton(
+            "Seleccionar Personal",
+            icon=ft.Icons.PERSON_SEARCH,
+            style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_600, shape=ft.RoundedRectangleBorder(radius=6)),
+            on_click=self.abrir_modal_seleccion_personal,
+            visible=not self.modo_edicion
+        )
 
-        nombre_completo = ""
-        cedula = ""
-        if self.persona:
-            nombre_completo = "%s %s" % (self.persona.get("nombres", ""), self.persona.get("apellidos", ""))
-            cedula = self.persona.get("cedula", "")
+        self.panel_personal = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Column([
+                        self.lbl_persona_resumen,
+                        self.lbl_persona_detalle,
+                        self.lbl_persona_extras
+                    ], spacing=2, tight=True, expand=True),
+                    self.btn_seleccionar_personal
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ]),
+            bgcolor=tc["badge_green"],
+            border_radius=10,
+            padding=ft.padding.all(14),
+            width=W_FULL,
+        )
 
-        lbl_persona = ft.Text(nombre_completo if nombre_completo else "Sin persona seleccionada",
-                              size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
-        lbl_cedula = ft.Text("C.I.: %s" % cedula, size=13, color=tc["text_secondary"])
+        self.actualizar_etiquetas_personal()
 
         self.tipo_comision = ft.Dropdown(
             label="Tipo de Comisión*",
@@ -60,9 +85,11 @@ class ComisionForm(ft.Container):
             border=ft.InputBorder.OUTLINE,
         )
 
-        self.destino = ft.TextField(label="Destino*", icon=ft.Icons.LOCATION_ON, width=W_FULL,
-                                    bgcolor=tc["input_bg"], border_color=tc["input_border"],
-                                    color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
+        self.destino = ft.TextField(
+            label="Destino*", icon=ft.Icons.LOCATION_ON, width=W_FULL,
+            bgcolor=tc["input_bg"], border_color=tc["input_border"],
+            color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"])
+        )
 
         hoy = datetime.now()
         self.txt_fecha_elaboracion = ft.TextField(
@@ -79,8 +106,7 @@ class ComisionForm(ft.Container):
 
         self.fecha_desde = None
         self.input_desde = ft.TextField(
-            label="Inicio*", icon=ft.Icons.EVENT_AVAILABLE,
-            width=W_FULL, read_only=True, hint_text="DD/MM/AAAA",
+            expand=True, read_only=True, hint_text="DD/MM/AAAA",
             bgcolor=tc["input_bg"], border_color=tc["input_border"],
             color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]),
         )
@@ -93,8 +119,7 @@ class ComisionForm(ft.Container):
 
         self.fecha_hasta = None
         self.input_hasta = ft.TextField(
-            label="Vencimiento*", icon=ft.Icons.EVENT_BUSY,
-            width=W_FULL, read_only=True, hint_text="DD/MM/AAAA",
+            expand=True, read_only=True, hint_text="DD/MM/AAAA",
             bgcolor=tc["input_bg"], border_color=tc["input_border"],
             color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]),
         )
@@ -116,7 +141,7 @@ class ComisionForm(ft.Container):
             hint_style=ft.TextStyle(color=tc["text_hint"]),
         )
 
-        if self.comision_id:
+        if self.modo_edicion:
             datos = ComisionModel.get_by_id(self.comision_id)
             if datos:
                 self.tipo_comision.value = datos.get("tipo_comision", "")
@@ -132,8 +157,8 @@ class ComisionForm(ft.Container):
                 except ValueError:
                     pass
 
-        btn_label = "Actualizar Comisión" if self.comision_id else "Guardar Comisión"
-        btn_icon = ft.Icons.UPDATE if self.comision_id else ft.Icons.SAVE
+        btn_label = "Actualizar Comisión" if self.modo_edicion else "Guardar Comisión(es)"
+        btn_icon = ft.Icons.UPDATE if self.modo_edicion else ft.Icons.SAVE
 
         self.btn_guardar = ft.Container(
             content=ft.Row([
@@ -168,33 +193,29 @@ class ComisionForm(ft.Container):
                 content=ft.Row([ft.Icon(icono, color=ft.Colors.GREEN_400, size=18),
                                 ft.Text(texto, size=14, weight=ft.FontWeight.BOLD, color=tc["text_secondary"])],
                                spacing=10),
-                padding=ft.padding.only(bottom=8),
+                padding=ft.padding.only(top=16, bottom=8),
             )
 
-        header_title = "Editar Comision" if self.comision_id else "Registrar Comision"
-        header_icon = ft.Icons.EDIT_DOCUMENT if self.comision_id else ft.Icons.BUSINESS_CENTER
+        header_title = "Editar Comision" if self.modo_edicion else "Registrar Comision(es)"
+        header_icon = ft.Icons.EDIT_DOCUMENT if self.modo_edicion else ft.Icons.BUSINESS_CENTER
 
         formulario = ft.Column(
             controls=[
                 ft.Icon(header_icon, size=48, color=ft.Colors.GREEN_400),
                 ft.Text(header_title, size=24, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
                 ft.Container(height=5),
-                ft.Container(
-                    content=ft.Column([lbl_persona, lbl_cedula], spacing=2, tight=True),
-                    bgcolor=tc["badge_green"], border_radius=10,
-                    padding=ft.padding.all(14), width=W_FULL,
-                ),
+                self.panel_personal,
                 ft.Divider(color=tc["divider"]),
                 seccion_titulo("Detalles de la Comision", ft.Icons.BUSINESS_CENTER),
                 self.tipo_comision,
                 self.destino,
                 self.txt_fecha_elaboracion,
                 seccion_titulo("Periodo", ft.Icons.DATE_RANGE),
-                ft.Row([self.input_desde, self.btn_desde], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([self.input_desde, self.btn_desde], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
                 ft.Row([ft.Icon(ft.Icons.ARROW_DOWNWARD, color=tc["text_tertiary"], size=20),
                         ft.Text("hasta", color=tc["text_tertiary"], size=12)],
                        alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                ft.Row([self.input_hasta, self.btn_hasta], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([self.input_hasta, self.btn_hasta], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
                 ft.Container(height=10),
                 ft.Container(content=self.lbl_total_dias, bgcolor=tc["badge_green"], border_radius=8,
                              padding=ft.padding.symmetric(horizontal=14, vertical=8), width=W_FULL),
@@ -206,6 +227,7 @@ class ComisionForm(ft.Container):
                 self.btn_volver,
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.START,
             tight=True, scroll=ft.ScrollMode.AUTO, spacing=8,
         )
 
@@ -223,6 +245,96 @@ class ComisionForm(ft.Container):
             animate_offset=ft.Animation(500, ft.AnimationCurve.EASE_OUT),
         )
         self.content = self._card_wrapper
+
+    def actualizar_etiquetas_personal(self):
+        cantidad = len(self.personal_seleccionados)
+        if cantidad == 0:
+            self.lbl_persona_resumen.value = "Sin persona seleccionada"
+            self.lbl_persona_detalle.value = "Haga click en 'Seleccionar Personal'"
+            self.lbl_persona_extras.visible = False
+        elif cantidad == 1:
+            p = self.personal_seleccionados[0]
+            self.lbl_persona_resumen.value = f"{p.get('nombres', '')} {p.get('apellidos', '')}".strip()
+            self.lbl_persona_detalle.value = f"C.I.: {p.get('cedula', '')}"
+            self.lbl_persona_extras.value = f"{p.get('grado_jerarquia', '')} | {p.get('cargo', '')}"
+            self.lbl_persona_extras.visible = True
+        else:
+            self.lbl_persona_resumen.value = f"{cantidad} personas seleccionadas"
+            nombres = [f"{p.get('nombres', '').split(' ')[0]} {p.get('apellidos', '').split(' ')[0]}" for p in self.personal_seleccionados]
+            resumen_nombres = ", ".join(nombres)
+            self.lbl_persona_detalle.value = resumen_nombres if len(resumen_nombres) <= 40 else resumen_nombres[:40] + "..."
+            self.lbl_persona_extras.visible = False
+
+        if hasattr(self, "lbl_persona_resumen"):
+            try:
+                self.lbl_persona_resumen.update()
+                self.lbl_persona_detalle.update()
+                self.lbl_persona_extras.update()
+            except Exception:
+                pass
+
+    def abrir_modal_seleccion_personal(self, e):
+        tc = theme_colors(self.dark_mode)
+        
+        todos_personal = PersonalModel.get_all()
+        seleccion_temporal = {p["id"] for p in self.personal_seleccionados}
+
+        def on_search(e):
+            term = e.control.value.lower()
+            for row in list_view.controls:
+                persona_row = row.data
+                texto_busqueda = f"{persona_row.get('nombres','')} {persona_row.get('apellidos','')} {persona_row.get('cedula','')}".lower()
+                row.visible = term in texto_busqueda
+            list_view.update()
+
+        list_view = ft.ListView(expand=True, spacing=10, height=300)
+        
+        for p in todos_personal:
+            check = ft.Checkbox(
+                label=f"{p.get('nombres','')} {p.get('apellidos','')} - C.I: {p.get('cedula','')}",
+                value=p["id"] in seleccion_temporal,
+                data=p["id"]
+            )
+            fila = ft.Container(content=check, data=p)
+            list_view.controls.append(fila)
+
+        def confirmar_seleccion(e):
+            ids_existentes = {p["id"] for p in self.personal_seleccionados}
+            for row in list_view.controls:
+                chk = row.content
+                if chk.value and row.data["id"] not in ids_existentes:
+                    self.personal_seleccionados.append(row.data)
+            self.actualizar_etiquetas_personal()
+            self.page.pop_dialog()
+
+        def cancelar(e):
+            self.page.pop_dialog()
+
+        txt_buscar = ft.TextField(
+            label="Buscar por nombre o cédula",
+            icon=ft.Icons.SEARCH,
+            on_change=on_search,
+            bgcolor=tc["input_bg"],
+            border_color=tc["input_border"],
+            color=tc["input_text"],
+        )
+
+        modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Seleccionar Personal", color=tc["text_primary"]),
+            content=ft.Container(
+                width=450,
+                content=ft.Column([txt_buscar, ft.Divider(), list_view], tight=True)
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=cancelar),
+                ft.ElevatedButton("Confirmar", on_click=confirmar_seleccion, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700)),
+            ],
+            bgcolor=tc["bg_dialog"]
+        )
+
+        self.page.show_dialog(modal)
+
 
     def abrir_calendario_desde(self, e):
         if self.dp_desde not in self.page.overlay:
@@ -267,9 +379,16 @@ class ComisionForm(ft.Container):
                 pass
 
     def _guardar(self, e):
-        if not self.personal_id:
-            self.page.snack_bar = ft.SnackBar(ft.Text("No se ha seleccionado una persona"),
-                                               bgcolor=ft.Colors.RED_700, open=True)
+        if not self.personal_seleccionados:
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                    ft.Text("No se ha seleccionado ninguna persona", color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+                open=True,
+            )
             self.page.update()
             return
 
@@ -283,8 +402,15 @@ class ComisionForm(ft.Container):
         if not self.input_hasta.value:
             vacios.append("Fecha Vencimiento")
         if vacios:
-            self.page.snack_bar = ft.SnackBar(ft.Text("Campos obligatorios: %s" % ", ".join(vacios)),
-                                               bgcolor=ft.Colors.RED_700, open=True)
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                    ft.Text("Campos obligatorios: %s" % ", ".join(vacios), color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+                open=True,
+            )
             self.page.update()
             return
 
@@ -292,13 +418,19 @@ class ComisionForm(ft.Container):
             desde = self.fecha_desde.replace(tzinfo=None) if self.fecha_desde.tzinfo else self.fecha_desde
             hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
             if desde > hasta:
-                self.page.snack_bar = ft.SnackBar(ft.Text("La fecha de inicio debe ser anterior al vencimiento"),
-                                                   bgcolor=ft.Colors.RED_700, open=True)
+                self.page.snack_bar = ft.SnackBar(
+                    ft.Row([
+                        ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                        ft.Text("La fecha de inicio debe ser anterior al vencimiento", color=ft.Colors.WHITE),
+                    ], spacing=10),
+                    bgcolor=ft.Colors.RED_700,
+                    duration=4000,
+                    open=True,
+                )
                 self.page.update()
                 return
 
-        datos = {
-            "personal_id": self.personal_id,
+        datos_base = {
             "tipo_comision": self.tipo_comision.value,
             "destino": self.destino.value,
             "fecha_elaboracion": self.txt_fecha_elaboracion.value,
@@ -307,19 +439,51 @@ class ComisionForm(ft.Container):
             "observaciones": self.observaciones.value,
         }
 
-        if self.comision_id:
-            datos["id"] = self.comision_id
-            ok, err = self.controller.actualizar(self.comision_id, datos)
-        else:
-            ok, err = self.controller.guardar(datos)
+        errores = []
+        exitos = 0
+        al_menos_uno_exitoso = False
 
-        if err:
-            self.page.snack_bar = ft.SnackBar(ft.Text(err), bgcolor=ft.Colors.RED_700, open=True)
+        for p in self.personal_seleccionados:
+            datos_actuales = datos_base.copy()
+            datos_actuales["personal_id"] = p["id"]
+
+            if self.modo_edicion:
+                datos_actuales["id"] = self.comision_id
+                ok, err = self.controller.actualizar(self.comision_id, datos_actuales)
+            else:
+                ok, err = self.controller.guardar(datos_actuales)
+
+            if err:
+                errores.append(f"{p.get('nombres','').split(' ')[0]}: {err}")
+            else:
+                exitos += 1
+                al_menos_uno_exitoso = True
+
+        if errores:
+            msg = "Errores: " + " | ".join(errores)
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
+                    ft.Text(msg, color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=6000,
+                open=True,
+            )
         else:
-            msg = "¡Comisión actualizada!" if self.comision_id else "¡Comisión registrada!"
-            self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.GREEN_700, open=True)
+            msg = "¡Comisión actualizada!" if self.modo_edicion else f"¡{exitos} comisión(es) registrada(s)!"
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                    ft.Text(msg, color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.GREEN_700,
+                duration=4000,
+                open=True,
+            )
+        
         self.page.update()
-        if ok and self.on_save:
+        if al_menos_uno_exitoso and self.on_save:
             self.on_save()
 
     def did_mount(self):

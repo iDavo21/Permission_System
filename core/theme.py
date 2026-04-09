@@ -108,8 +108,92 @@ def create_input(dark=True, **kwargs):
         "label_style": ft.TextStyle(color=tc["input_label"]),
         "content_padding": ft.padding.symmetric(horizontal=14, vertical=12),
     }
+    for key in ["label", "value", "hint_text", "prefix_icon", "suffix_text"]:
+        if key in kwargs:
+            defaults[key] = kwargs.pop(key)
+    if "expand" in kwargs:
+        defaults["expand"] = kwargs.pop("expand")
+    if "width" in kwargs:
+        defaults["width"] = kwargs.pop("width")
+    if "max_length" in kwargs:
+        defaults["max_length"] = kwargs.pop("max_length")
+    if "input_filter" in kwargs:
+        filter_type = kwargs.pop("input_filter")
+        if filter_type == "number":
+            defaults["input_filter"] = ft.NumbersOnlyInputFilter()
+        else:
+            defaults["input_filter"] = filter_type
+    if "multiline" in kwargs:
+        defaults["multiline"] = kwargs.pop("multiline")
+    if "min_lines" in kwargs:
+        defaults["min_lines"] = kwargs.pop("min_lines")
+    if "max_lines" in kwargs:
+        defaults["max_lines"] = kwargs.pop("max_lines")
     defaults.update(kwargs)
     return ft.TextField(**defaults)
+
+
+def create_primary_button(text, icon=None, on_click=None, dark=True):
+    content = []
+    if icon:
+        content.append(ft.Icon(icon, color=ft.Colors.WHITE, size=20))
+    content.append(ft.Text(text, color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD))
+    return ft.Container(
+        content=ft.Row(content, spacing=8),
+        gradient=ft.LinearGradient(
+            begin=ft.Alignment.CENTER_LEFT,
+            end=ft.Alignment.CENTER_RIGHT,
+            colors=["#1b5e20", "#2e7d32"],
+        ),
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=28, vertical=14),
+        ink=True,
+        on_click=on_click,
+    )
+
+
+def create_secondary_button(text, icon=None, on_click=None, dark=True):
+    tc = theme_colors(dark)
+    content = []
+    if icon:
+        content.append(ft.Icon(ft.Icons.ARROW_BACK, color=tc["text_secondary"], size=20))
+    content.append(ft.Text(text, color=tc["text_secondary"], size=14, weight=ft.FontWeight.BOLD))
+    return ft.Container(
+        content=ft.Row(content, spacing=8),
+        border=ft.border.all(1, tc["border_primary"]),
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=28, vertical=14),
+        ink=True,
+        on_click=on_click,
+    )
+
+
+def create_success_button(text, on_click=None):
+    return ft.Container(
+        content=ft.Row([
+            ft.Icon(ft.Icons.CHECK, color=ft.Colors.WHITE, size=20),
+            ft.Text(text, color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
+        ], spacing=8),
+        bgcolor=ft.Colors.GREEN_700,
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=28, vertical=14),
+        ink=True,
+        on_click=on_click,
+    )
+
+
+def create_danger_button(text, on_click=None):
+    return ft.Container(
+        content=ft.Row([
+            ft.Icon(ft.Icons.DELETE, color=ft.Colors.WHITE, size=20),
+            ft.Text(text, color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
+        ], spacing=8),
+        bgcolor=ft.Colors.RED_700,
+        border_radius=12,
+        padding=ft.padding.symmetric(horizontal=28, vertical=14),
+        ink=True,
+        on_click=on_click,
+    )
 
 
 def create_stat_card(dark=True, icon=None, value="0", label="", accent=ft.Colors.GREEN_400):
@@ -155,40 +239,45 @@ def create_header(dark=True, title="", subtitle="", icon=ft.Icons.HOME):
     )
 
 
-def create_primary_button(text, icon=ft.Icons.SAVE, on_click=None):
-    return ft.Container(
-        content=ft.Row([
-            ft.Icon(icon, color=ft.Colors.WHITE, size=20),
-            ft.Text(text, color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
-        ], spacing=8),
-        gradient=ft.LinearGradient(
-            begin=ft.Alignment.CENTER_LEFT,
-            end=ft.Alignment.CENTER_RIGHT,
-            colors=["#1b5e20", "#2e7d32"],
-        ),
-        border_radius=12,
-        padding=ft.padding.symmetric(horizontal=28, vertical=14),
-        ink=True,
-        on_click=on_click,
-    )
-
-
-def create_secondary_button(text, icon=ft.Icons.CANCEL, on_click=None):
-    return ft.Container(
-        content=ft.Row([
-            ft.Icon(icon, color=ft.Colors.GREY_400, size=20),
-            ft.Text(text, color=ft.Colors.GREY_400, size=14, weight=ft.FontWeight.BOLD),
-        ], spacing=8),
-        border=ft.border.all(1, ft.Colors.GREY_600),
-        border_radius=12,
-        padding=ft.padding.symmetric(horizontal=28, vertical=14),
-        ink=True,
-        on_click=on_click,
-    )
-
-
 def apply_page_theme(page, is_dark=True):
     page.theme_mode = ft.ThemeMode.DARK if is_dark else ft.ThemeMode.LIGHT
     page.theme = ft.Theme(color_scheme_seed=ft.Colors.GREEN_400 if is_dark else ft.Colors.GREEN_600)
     page.bgcolor = theme_colors(is_dark)["bg_primary"]
     page.update()
+
+
+def create_empty_state(
+    icon=ft.Icons.INBOX_OUTLINED,
+    title="No hay datos",
+    subtitle="No hay registros para mostrar",
+    dark=True
+):
+    tc = theme_colors(dark)
+    return ft.Column(
+        [
+            ft.Container(
+                content=ft.Icon(icon, size=64, color=tc["empty_icon"]),
+                bgcolor=tc["empty_icon_bg"],
+                border_radius=50,
+                width=120,
+                height=120,
+                alignment=ft.alignment.center,
+            ),
+            ft.Text(title, size=18, color=tc["empty_text"], weight=ft.FontWeight.W_500),
+            ft.Text(subtitle, size=13, color=tc["empty_subtext"]),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=16,
+    )
+
+
+def create_loading_indicator(dark=True, text="Cargando..."):
+    tc = theme_colors(dark)
+    return ft.Column(
+        [
+            ft.ProgressRing(width=40, height=40, color=ft.Colors.GREEN_400),
+            ft.Text(text, size=14, color=tc["text_secondary"]),
+        ],
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+        spacing=10,
+    )

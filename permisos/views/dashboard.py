@@ -305,8 +305,9 @@ class AdminView(ft.Container):
         return sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO)
 
     def _on_fab_hover(self, e):
-        self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
-        self.update()
+        if self.page:
+            self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
+            self.update()
 
     def _toggle_filtros(self, e):
         self.filtros_abiertos = not self.filtros_abiertos
@@ -411,16 +412,16 @@ class AdminView(ft.Container):
         tc = theme_colors(self.dark_mode)
 
         def cerrar_dialogo(e):
-            dialogo.open = False
-            self.page.update()
+            self.page.pop_dialog()
 
         def eliminar_y_cerrar(e):
+            self.page.pop_dialog()
+            # Ahora si llamamos al callback (puede desmontar este AdminView)
             if self.on_delete:
                 self.on_delete(permiso_id)
-            dialogo.open = False
-            self.page.update()
 
         dialogo = ft.AlertDialog(
+            modal=True,
             title=ft.Text("Confirmar eliminacion", color=tc["text_primary"]),
             content=ft.Text("Esta accion no se puede deshacer.", color=tc["text_secondary"]),
             actions=[
@@ -431,9 +432,7 @@ class AdminView(ft.Container):
             bgcolor=tc["bg_dialog"],
         )
 
-        self.page.overlay.append(dialogo)
-        dialogo.open = True
-        self.page.update()
+        self.page.show_dialog(dialogo)
 
     def load_data(self):
         self.todos_los_permisos = self.todos_los_permisos

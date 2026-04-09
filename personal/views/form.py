@@ -1,18 +1,26 @@
 import flet as ft
 import asyncio
-from core.theme import theme_colors
+from core.theme import theme_colors, create_input, create_primary_button, create_secondary_button
+from core.constants import CEDULA_MIN, CEDULA_MAX, TELEFONO_MIN, TELEFONO_MAX
 
 
 class PersonalForm(ft.Container):
-    def __init__(self, controller, on_save, on_cancel, dark_mode=True):
+    def __init__(self, controller, on_save, on_cancel, personal_id=None, datos_iniciales=None, dark_mode=True):
         super().__init__()
         self.expand = True
+        self.padding = ft.padding.all(24)
         self.controller = controller
         self.on_save = on_save
         self.on_cancel = on_cancel
+        self.personal_id = personal_id
+        self.datos_iniciales = datos_iniciales or {}
         self.dark_mode = dark_mode
+        self.is_edit = personal_id is not None
 
         self._build_ui()
+
+        if self.is_edit:
+            self._populate_fields()
 
     def _build_ui(self):
         tc = theme_colors(self.dark_mode)
@@ -21,8 +29,8 @@ class PersonalForm(ft.Container):
         self.txt_2do_nombre = self._input("2do Nombre", expand=True)
         self.txt_1er_apellido = self._input("1er Apellido *", expand=True)
         self.txt_2do_apellido = self._input("2do Apellido", expand=True)
-        self.txt_cedula = self._input("Cedula *", width=200)
-        self.txt_telefono = self._input("Telefono *", width=200)
+        self.txt_cedula = self._input("Cedula *", width=200, max_length=8, input_filter="number")
+        self.txt_telefono = self._input("Telefono *", width=200, max_length=11, input_filter="number")
         self.txt_grado = self._input("Grado Jerarquico", width=200)
         self.txt_cargo = self._input("Cargo", expand=True)
         self.txt_dir_dom = self._input("Direccion Domiciliaria", expand=True)
@@ -30,33 +38,11 @@ class PersonalForm(ft.Container):
 
         self.lbl_error = ft.Text("", color=ft.Colors.RED_400, size=13, weight=ft.FontWeight.W_500)
 
-        self.btn_save = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.SAVE, color=ft.Colors.WHITE, size=20),
-                ft.Text("Guardar", color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
-            ], spacing=8),
-            gradient=ft.LinearGradient(
-                begin=ft.Alignment.CENTER_LEFT,
-                end=ft.Alignment.CENTER_RIGHT,
-                colors=["#1b5e20", "#2e7d32"],
-            ),
-            border_radius=12,
-            padding=ft.padding.symmetric(horizontal=28, vertical=14),
-            ink=True,
-            on_click=self._on_save,
-        )
+        self.btn_save = create_primary_button("Guardar", icon=ft.Icons.SAVE, on_click=self._on_save, dark=self.dark_mode)
+        self.btn_cancel = create_secondary_button("Cancelar", icon=ft.Icons.ARROW_BACK, on_click=lambda e: self.on_cancel(), dark=self.dark_mode)
 
-        self.btn_cancel = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.ARROW_BACK, color=tc["text_secondary"], size=20),
-                ft.Text("Cancelar", color=tc["text_secondary"], size=14, weight=ft.FontWeight.BOLD),
-            ], spacing=8),
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=12,
-            padding=ft.padding.symmetric(horizontal=28, vertical=14),
-            ink=True,
-            on_click=lambda e: self.on_cancel(),
-        )
+        titulo = "Editar Personal" if self.is_edit else "Registrar Personal"
+        subtitulo = "Modifique los datos del miembro" if self.is_edit else "Complete los datos del miembro"
 
         self.content = ft.Column(
             controls=[
@@ -70,8 +56,8 @@ class PersonalForm(ft.Container):
                                 padding=10,
                             ),
                             ft.Column([
-                                ft.Text("Registrar Personal", size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                                ft.Text("Complete los datos del miembro", size=12, color=tc["text_secondary"]),
+                                ft.Text(titulo, size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                                ft.Text(subtitulo, size=12, color=tc["text_secondary"]),
                             ], spacing=2),
                         ], spacing=14),
                         ft.Container(expand=True),
@@ -111,24 +97,15 @@ class PersonalForm(ft.Container):
             expand=True,
         )
 
-    def _input(self, label, expand=False, width=None):
-        tc = theme_colors(self.dark_mode)
-        kw = {
-            "label": label,
-            "border_radius": 10,
-            "filled": True,
-            "bgcolor": tc["input_bg"],
-            "border_color": tc["input_border"],
-            "focused_border_color": ft.Colors.GREEN_400,
-            "color": tc["input_text"],
-            "label_style": ft.TextStyle(color=tc["input_label"]),
-            "content_padding": ft.padding.symmetric(horizontal=14, vertical=12),
-        }
-        if expand:
-            kw["expand"] = True
-        if width:
-            kw["width"] = width
-        return ft.TextField(**kw)
+    def _input(self, label, expand=False, width=None, max_length=None, input_filter=None):
+        return create_input(
+            dark=self.dark_mode,
+            label=label,
+            expand=expand,
+            width=width,
+            max_length=max_length,
+            input_filter=input_filter,
+        )
 
     def _section(self, title, icon, fields):
         tc = theme_colors(self.dark_mode)
@@ -143,6 +120,24 @@ class PersonalForm(ft.Container):
             *fields,
         ], spacing=10)
 
+    def _populate_fields(self):
+        d = self.datos_iniciales
+        if d and isinstance(d, dict):
+            nombres = d.get("nombres", "").split(" ", 1)
+            self.txt_1er_nombre.value = nombres[0] if nombres else ""
+            self.txt_2do_nombre.value = nombres[1] if len(nombres) > 1 else ""
+            
+            apellidos = d.get("apellidos", "").split(" ", 1)
+            self.txt_1er_apellido.value = apellidos[0] if apellidos else ""
+            self.txt_2do_apellido.value = apellidos[1] if len(apellidos) > 1 else ""
+            
+            self.txt_cedula.value = str(d.get("cedula", ""))
+            self.txt_telefono.value = str(d.get("telefono", ""))
+            self.txt_grado.value = str(d.get("grado_jerarquia", ""))
+            self.txt_cargo.value = str(d.get("cargo", ""))
+            self.txt_dir_dom.value = str(d.get("dir_domiciliaria", ""))
+            self.txt_dir_eme.value = str(d.get("dir_emergencia", ""))
+
     def _on_save(self, e):
         self.lbl_error.value = ""
 
@@ -151,22 +146,53 @@ class PersonalForm(ft.Container):
             self.update()
             return
 
+        cedula_val = self.txt_cedula.value or ""
+        telefono_val = self.txt_telefono.value or ""
+
+        if len(cedula_val) < CEDULA_MIN or len(cedula_val) > CEDULA_MAX:
+            self.lbl_error.value = f"La cédula debe tener entre {CEDULA_MIN} y {CEDULA_MAX} dígitos"
+            self.update()
+            return
+
+        if telefono_val and (len(telefono_val) < TELEFONO_MIN or len(telefono_val) > TELEFONO_MAX):
+            self.lbl_error.value = f"El teléfono debe tener entre {TELEFONO_MIN} y {TELEFONO_MAX} dígitos"
+            self.update()
+            return
+
+        def _v(val):
+            if isinstance(val, tuple):
+                val = " ".join(str(v) for v in val)
+            return str(val).strip() if val is not None else ""
+
         datos = {
-            "nombres": "%s %s" % (self.txt_1er_nombre.value.strip(), self.txt_2do_nombre.value.strip()).strip(),
-            "apellidos": "%s %s" % (self.txt_1er_apellido.value.strip(), self.txt_2do_apellido.value.strip()).strip(),
-            "cedula": self.txt_cedula.value.strip(),
-            "telefono": self.txt_telefono.value.strip(),
-            "grado_jerarquia": self.txt_grado.value.strip(),
-            "cargo": self.txt_cargo.value.strip(),
-            "dir_domiciliaria": self.txt_dir_dom.value.strip(),
-            "dir_emergencia": self.txt_dir_eme.value.strip(),
+            "nombres": "%s %s" % (_v(self.txt_1er_nombre.value), _v(self.txt_2do_nombre.value)),
+            "apellidos": "%s %s" % (_v(self.txt_1er_apellido.value), _v(self.txt_2do_apellido.value)),
+            "cedula": _v(self.txt_cedula.value),
+            "telefono": _v(self.txt_telefono.value),
+            "grado_jerarquia": _v(self.txt_grado.value),
+            "cargo": _v(self.txt_cargo.value),
+            "dir_domiciliaria": _v(self.txt_dir_dom.value),
+            "dir_emergencia": _v(self.txt_dir_eme.value),
         }
 
-        pid, err = self.controller.guardar(datos)
+        if self.is_edit:
+            pid, err = self.controller.actualizar(self.personal_id, datos)
+        else:
+            pid, err = self.controller.guardar(datos)
         if err:
             self.lbl_error.value = err
             self.update()
         else:
+            msg = "Personal actualizado correctamente" if self.is_edit else "Personal registrado correctamente"
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                    ft.Text(msg, color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.GREEN_700,
+                duration=3000,
+                open=True,
+            )
             self.on_save(pid)
 
     def did_mount(self):

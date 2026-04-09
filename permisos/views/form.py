@@ -16,20 +16,24 @@ class PermissionView(ft.Container):
         self.alignment = ft.Alignment.CENTER
         self.on_back = on_back
         self.on_save = on_save
-        self.personal_id = personal_id
+        self.personal_id_inicial = personal_id
         self.permiso_id = permiso_id
         self.dark_mode = dark_mode
+        
+        self.personal_seleccionados = []
+        
+        # Modo de edicion: Restringir a 1 persona
+        self.modo_edicion = bool(permiso_id)
 
-        W_FULL = 440
-
-        self.persona = None
         if personal_id:
-            self.persona = PersonalModel.get_by_id(personal_id)
+            persona = PersonalModel.get_by_id(personal_id)
+            if persona:
+                self.personal_seleccionados.append(persona)
 
-        if permiso_id and not self.persona:
+        if self.modo_edicion and not self.personal_seleccionados:
             datos_permiso = PermisoModel.get_by_id(permiso_id)
             if datos_permiso:
-                self.persona = {
+                self.personal_seleccionados.append({
                     "id": datos_permiso.get("personal_id"),
                     "nombres": datos_permiso.get("nombres", ""),
                     "apellidos": datos_permiso.get("apellidos", ""),
@@ -39,26 +43,44 @@ class PermissionView(ft.Container):
                     "cargo": datos_permiso.get("cargo", ""),
                     "dir_domiciliaria": datos_permiso.get("dir_domiciliaria", ""),
                     "dir_emergencia": datos_permiso.get("dir_emergencia", ""),
-                }
+                })
 
-        nombre_completo = ""
-        cedula = ""
-        grado = ""
-        cargo = ""
-        if self.persona:
-            nombre_completo = "%s %s" % (self.persona.get("nombres", ""), self.persona.get("apellidos", ""))
-            cedula = self.persona.get("cedula", "")
-            grado = self.persona.get("grado_jerarquia", "")
-            cargo = self.persona.get("cargo", "")
+        self._build_ui()
 
+    def _build_ui(self):
         tc = theme_colors(self.dark_mode)
+        W_FULL = 440
 
-        lbl_persona = ft.Text(
-            nombre_completo if nombre_completo else "Sin persona seleccionada",
-            size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400,
+        self.lbl_persona_resumen = ft.Text("Sin persona seleccionada", size=16, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400)
+        self.lbl_persona_detalle = ft.Text("Seleccione al menos a una persona", size=13, color=tc["text_secondary"])
+        self.lbl_persona_extras = ft.Text("", size=13, color=tc["text_tertiary"], visible=False)
+
+        self.btn_seleccionar_personal = ft.ElevatedButton(
+            "Seleccionar Personal",
+            icon=ft.Icons.PERSON_SEARCH,
+            style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_600, shape=ft.RoundedRectangleBorder(radius=6)),
+            on_click=self.abrir_modal_seleccion_personal,
+            visible=not self.modo_edicion
         )
-        lbl_cedula = ft.Text("C.I.: %s" % cedula, size=13, color=tc["text_secondary"])
-        lbl_info = ft.Text("%s | %s" % (grado, cargo), size=13, color=tc["text_tertiary"])
+
+        self.panel_personal = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Column([
+                        self.lbl_persona_resumen,
+                        self.lbl_persona_detalle,
+                        self.lbl_persona_extras
+                    ], spacing=2, tight=True, expand=True),
+                    self.btn_seleccionar_personal
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+            ]),
+            bgcolor=tc["badge_green"],
+            border_radius=10,
+            padding=ft.padding.all(14),
+            width=W_FULL,
+        )
+
+        self.actualizar_etiquetas_personal()
 
         self.tipo_permiso = ft.Dropdown(
             label="Tipo de Permiso*",
@@ -85,8 +107,7 @@ class PermissionView(ft.Container):
 
         self.fecha_desde = None
         self.input_desde = ft.TextField(
-            label="Inicio*", icon=ft.Icons.EVENT_AVAILABLE,
-            width=W_FULL, read_only=True, hint_text="DD/MM/AAAA",
+            expand=True, read_only=True, hint_text="DD/MM/AAAA",
             bgcolor=tc["input_bg"],
             border_color=tc["input_border"],
             color=tc["input_text"],
@@ -106,8 +127,7 @@ class PermissionView(ft.Container):
 
         self.fecha_hasta = None
         self.input_hasta = ft.TextField(
-            label="Vencimiento*", icon=ft.Icons.EVENT_BUSY,
-            width=W_FULL, read_only=True, hint_text="DD/MM/AAAA",
+            expand=True, read_only=True, hint_text="DD/MM/AAAA",
             bgcolor=tc["input_bg"],
             border_color=tc["input_border"],
             color=tc["input_text"],
@@ -143,8 +163,8 @@ class PermissionView(ft.Container):
             hint_style=ft.TextStyle(color=tc["text_hint"]),
         )
 
-        if permiso_id:
-            datos_permiso = PermisoModel.get_by_id(permiso_id)
+        if self.modo_edicion:
+            datos_permiso = PermisoModel.get_by_id(self.permiso_id)
             if datos_permiso:
                 self.tipo_permiso.value = datos_permiso.get("tipo_permiso", "")
                 self.txt_fecha_elaboracion.value = datos_permiso.get("fecha_elaboracion", "")
@@ -159,8 +179,8 @@ class PermissionView(ft.Container):
                     self.fecha_desde = None
                     self.fecha_hasta = None
 
-        btn_label = "Actualizar Permiso" if permiso_id else "Guardar Permiso"
-        btn_icon = ft.Icons.UPDATE if permiso_id else ft.Icons.SAVE
+        btn_label = "Actualizar Permiso" if self.modo_edicion else "Guardar Permiso(s)"
+        btn_icon = ft.Icons.UPDATE if self.modo_edicion else ft.Icons.SAVE
 
         self.btn_guardar = ft.ElevatedButton(
             btn_label,
@@ -174,7 +194,6 @@ class PermissionView(ft.Container):
             width=W_FULL,
             on_click=self.guardar_permiso
         )
-        self._spinner = ft.ProgressRing(width=20, height=20, stroke_width=2, color=ft.Colors.WHITE, visible=False)
         self.btn_volver = ft.TextButton(
             "Volver",
             icon=ft.Icons.ARROW_BACK,
@@ -191,25 +210,15 @@ class PermissionView(ft.Container):
                 padding=ft.padding.only(top=16, bottom=4),
             )
 
-        header_title = "Editar Permiso" if permiso_id else "Registrar Permiso"
-        header_icon = ft.Icons.EDIT_DOCUMENT if permiso_id else ft.Icons.ASSIGNMENT_ADD
+        header_title = "Editar Permiso" if self.modo_edicion else "Registrar Permiso(s)"
+        header_icon = ft.Icons.EDIT_DOCUMENT if self.modo_edicion else ft.Icons.ASSIGNMENT_ADD
 
         formulario = ft.Column(
             controls=[
                 ft.Icon(header_icon, size=48, color=ft.Colors.GREEN_400),
                 ft.Text(header_title, size=24, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
                 ft.Container(height=5),
-                ft.Container(
-                    content=ft.Column([
-                        lbl_persona,
-                        lbl_cedula,
-                        lbl_info,
-                    ], spacing=2, tight=True),
-                    bgcolor=tc["badge_green"],
-                    border_radius=10,
-                    padding=ft.padding.all(14),
-                    width=W_FULL,
-                ),
+                self.panel_personal,
                 ft.Divider(color=tc["divider"]),
 
                 seccion_titulo("Detalles del Permiso", ft.Icons.ASSIGNMENT),
@@ -217,7 +226,7 @@ class PermissionView(ft.Container):
                 self.txt_fecha_elaboracion,
 
                 seccion_titulo("Periodo", ft.Icons.DATE_RANGE),
-                ft.Row([self.input_desde, self.btn_desde], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([self.input_desde, self.btn_desde], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
                 ft.Row(
                     controls=[
                         ft.Icon(ft.Icons.ARROW_DOWNWARD, color=tc["text_tertiary"], size=20),
@@ -226,7 +235,7 @@ class PermissionView(ft.Container):
                     alignment=ft.MainAxisAlignment.CENTER,
                     spacing=4,
                 ),
-                ft.Row([self.input_hasta, self.btn_hasta], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([self.input_hasta, self.btn_hasta], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
                 ft.Container(height=10),
                 ft.Container(
                     content=self.lbl_total_dias,
@@ -268,6 +277,100 @@ class PermissionView(ft.Container):
             animate_offset=ft.Animation(500, ft.AnimationCurve.EASE_OUT),
         )
         self.content = self._card_wrapper
+
+    def actualizar_etiquetas_personal(self):
+        cantidad = len(self.personal_seleccionados)
+        if cantidad == 0:
+            self.lbl_persona_resumen.value = "Sin persona seleccionada"
+            self.lbl_persona_detalle.value = "Haga click en 'Seleccionar Personal'"
+            self.lbl_persona_extras.visible = False
+        elif cantidad == 1:
+            p = self.personal_seleccionados[0]
+            self.lbl_persona_resumen.value = f"{p.get('nombres', '')} {p.get('apellidos', '')}".strip()
+            self.lbl_persona_detalle.value = f"C.I.: {p.get('cedula', '')}"
+            self.lbl_persona_extras.value = f"{p.get('grado_jerarquia', '')} | {p.get('cargo', '')}"
+            self.lbl_persona_extras.visible = True
+        else:
+            self.lbl_persona_resumen.value = f"{cantidad} personas seleccionadas"
+            nombres = [f"{p.get('nombres', '').split(' ')[0]} {p.get('apellidos', '').split(' ')[0]}" for p in self.personal_seleccionados]
+            resumen_nombres = ", ".join(nombres)
+            self.lbl_persona_detalle.value = resumen_nombres if len(resumen_nombres) <= 40 else resumen_nombres[:40] + "..."
+            self.lbl_persona_extras.visible = False
+
+        if hasattr(self, "lbl_persona_resumen"):
+            try:
+                self.lbl_persona_resumen.update()
+                self.lbl_persona_detalle.update()
+                self.lbl_persona_extras.update()
+            except Exception:
+                pass
+
+    def abrir_modal_seleccion_personal(self, e):
+        tc = theme_colors(self.dark_mode)
+        
+        todos_personal = PersonalModel.get_all()
+        seleccion_temporal = {p["id"] for p in self.personal_seleccionados}
+
+        def on_search(e):
+            term = e.control.value.lower()
+            for row in list_view.controls:
+                persona_row = row.data
+                texto_busqueda = f"{persona_row.get('nombres','')} {persona_row.get('apellidos','')} {persona_row.get('cedula','')}".lower()
+                row.visible = term in texto_busqueda
+            list_view.update()
+
+        list_view = ft.ListView(expand=True, spacing=10, height=300)
+        
+        for p in todos_personal:
+            check = ft.Checkbox(
+                label=f"{p.get('nombres','')} {p.get('apellidos','')} - C.I: {p.get('cedula','')}",
+                value=p["id"] in seleccion_temporal,
+                data=p["id"]
+            )
+            fila = ft.Container(content=check, data=p)
+            list_view.controls.append(fila)
+
+        def confirmar_seleccion(e):
+            ids_existentes = {p["id"] for p in self.personal_seleccionados}
+            for row in list_view.controls:
+                chk = row.content
+                if chk.value and row.data["id"] not in ids_existentes:
+                    self.personal_seleccionados.append(row.data)
+            self.actualizar_etiquetas_personal()
+            self.page.pop_dialog()
+
+        def cancelar(e):
+            self.page.pop_dialog()
+
+        txt_buscar = ft.TextField(
+            label="Buscar por nombre o cédula",
+            icon=ft.Icons.SEARCH,
+            on_change=on_search,
+            bgcolor=tc["input_bg"],
+            border_color=tc["input_border"],
+            color=tc["input_text"],
+        )
+
+        modal = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Seleccionar Personal", color=tc["text_primary"]),
+            content=ft.Container(
+                width=450,
+                content=ft.Column([
+                    txt_buscar,
+                    ft.Divider(),
+                    list_view
+                ], tight=True)
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=cancelar),
+                ft.ElevatedButton("Confirmar", on_click=confirmar_seleccion, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700)),
+            ],
+            bgcolor=tc["bg_dialog"]
+        )
+
+        self.page.show_dialog(modal)
+
 
     def did_mount(self):
         async def animate():
@@ -323,14 +426,17 @@ class PermissionView(ft.Container):
                 pass
 
     def guardar_permiso(self, e):
-        if not self.personal_id:
-            snack = ft.SnackBar(
-                ft.Text("No se ha seleccionado una persona"),
-                bgcolor=ft.Colors.RED_700, duration=4000,
+        if not self.personal_seleccionados:
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                    ft.Text("No se ha seleccionado ninguna persona", color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+                open=True,
             )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.update()
+            self.page.update()
             return
 
         campos_obligatorios = {
@@ -341,30 +447,35 @@ class PermissionView(ft.Container):
 
         vacios = [k for k, v in campos_obligatorios.items() if not v or not str(v).strip()]
         if vacios:
-            snack = ft.SnackBar(
-                ft.Text("Campo(s) obligatorio(s) vacío(s): %s" % ", ".join(vacios)),
-                bgcolor=ft.Colors.RED_700, duration=4000,
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                    ft.Text("Campo(s) obligatorio(s) vacío(s): %s" % ", ".join(vacios), color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+                open=True,
             )
-            self.page.overlay.append(snack)
-            snack.open = True
-            self.update()
+            self.page.update()
             return
 
         if self.fecha_desde and self.fecha_hasta:
             desde = self.fecha_desde.replace(tzinfo=None) if self.fecha_desde.tzinfo else self.fecha_desde
             hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
             if desde > hasta:
-                snack = ft.SnackBar(
-                    ft.Text("La fecha de inicio debe ser anterior al vencimiento"),
-                    bgcolor=ft.Colors.RED_700, duration=4000,
+                self.page.snack_bar = ft.SnackBar(
+                    ft.Row([
+                        ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
+                        ft.Text("La fecha de inicio debe ser anterior al vencimiento", color=ft.Colors.WHITE),
+                    ], spacing=10),
+                    bgcolor=ft.Colors.RED_700,
+                    duration=4000,
+                    open=True,
                 )
-                self.page.overlay.append(snack)
-                snack.open = True
-                self.update()
+                self.page.update()
                 return
 
-        datos = {
-            "personal_id":        self.personal_id,
+        datos_base = {
             "tipo_permiso":       self.tipo_permiso.value,
             "fecha_elaboracion":  self.txt_fecha_elaboracion.value,
             "fecha_desde":        self.input_desde.value,
@@ -372,18 +483,45 @@ class PermissionView(ft.Container):
             "observaciones":      self.observaciones.value,
         }
 
-        if self.permiso_id:
-            datos["id"] = self.permiso_id
-            ok, err = self.on_save(datos) if self.on_save else (None, "No handler")
-        else:
-            ok, err = self.on_save(datos) if self.on_save else (None, "No handler")
+        errores = []
+        exitos = 0
 
-        if err:
-            snack = ft.SnackBar(ft.Text(err), bgcolor=ft.Colors.RED_700, duration=4000)
-        else:
-            msg = "¡Permiso actualizado con éxito!" if self.permiso_id else "¡Permiso registrado con éxito!"
-            snack = ft.SnackBar(ft.Text(msg), bgcolor=ft.Colors.GREEN_700, duration=4000)
+        for p in self.personal_seleccionados:
+            datos_actuales = datos_base.copy()
+            datos_actuales["personal_id"] = p["id"]
 
-        self.page.overlay.append(snack)
-        snack.open = True
+            if self.modo_edicion:
+                datos_actuales["id"] = self.permiso_id
+            
+            ok, err = self.on_save(datos_actuales) if self.on_save else (None, "No handler")
+            if err:
+                errores.append(f"{p.get('nombres', '').split(' ')[0]}: {err}")
+            else:
+                exitos += 1
+
+        if errores:
+            msg = "Errores: " + " | ".join(errores)
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
+                    ft.Text(msg, color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.RED_700,
+                duration=6000,
+                open=True,
+            )
+        else:
+            msg = "¡Permiso actualizado con éxito!" if self.modo_edicion else f"¡{exitos} permiso(s) registrado(s) con éxito!"
+            self.page.snack_bar = ft.SnackBar(
+                ft.Row([
+                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                    ft.Text(msg, color=ft.Colors.WHITE),
+                ], spacing=10),
+                bgcolor=ft.Colors.GREEN_700,
+                duration=4000,
+                open=True,
+            )
+
         self.page.update()
+        if exitos > 0 and self.on_back:
+            self.on_back()

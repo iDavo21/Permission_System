@@ -106,6 +106,8 @@ class PersonalModel:
     def delete(personal_id: int):
         conn = PersonalModel._connect()
         try:
+            conn.execute("DELETE FROM permisos WHERE personal_id = ?", (personal_id,))
+            conn.execute("DELETE FROM comisiones WHERE personal_id = ?", (personal_id,))
             conn.execute("DELETE FROM personal WHERE id = ?", (personal_id,))
             conn.commit()
         finally:

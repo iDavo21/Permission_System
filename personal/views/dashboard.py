@@ -1,16 +1,19 @@
 import flet as ft
 import asyncio
 from core.theme import theme_colors
+from core.constants import CEDULA_MIN, CEDULA_MAX, TELEFONO_MIN, TELEFONO_MAX
 
 
 class PersonalDashboard(ft.Container):
-    def __init__(self, controller, on_navigate_permisos, on_navigate_comisiones, on_add_personal=None, dark_mode=True):
+    def __init__(self, controller, on_navigate_permisos, on_navigate_comisiones, on_add_personal=None, on_edit_personal=None, on_delete_personal=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.controller = controller
         self.on_navigate_permisos = on_navigate_permisos
         self.on_navigate_comisiones = on_navigate_comisiones
         self.on_add_personal = on_add_personal
+        self.on_edit_personal = on_edit_personal
+        self.on_delete_personal = on_delete_personal
         self.dark_mode = dark_mode
 
         self._build_ui()
@@ -199,8 +202,9 @@ class PersonalDashboard(ft.Container):
         )
 
     def _on_fab_hover(self, e):
-        self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
-        self.update()
+        if self.page:
+            self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
+            self.update()
 
     def _show_empty(self, show):
         self.empty_state.visible = show
@@ -281,25 +285,46 @@ class PersonalDashboard(ft.Container):
         self.update()
 
     def _on_edit(self, e, personal_id):
-        persona = self.controller.obtener_por_id(personal_id)
-        if persona:
-            dlg = self._build_edit_dialog(persona)
-            self.page.dialog = dlg
-            dlg.open = True
-            self.page.update()
+        if self.on_edit_personal:
+            self.on_edit_personal(personal_id)
+        else:
+            persona = self.controller.obtener_por_id(personal_id)
+            if persona:
+                dlg = self._build_edit_dialog(persona)
+                self.page.show_dialog(dlg)
 
     def _build_edit_dialog(self, persona):
         tc = theme_colors(self.dark_mode)
         txt_nombres = ft.TextField(label="Nombres", value=persona.get("nombres", ""), expand=True, border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
         txt_apellidos = ft.TextField(label="Apellidos", value=persona.get("apellidos", ""), expand=True, border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
-        txt_cedula = ft.TextField(label="Cedula", value=persona.get("cedula", ""), border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
-        txt_telefono = ft.TextField(label="Telefono", value=persona.get("telefono", ""), border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
+        txt_cedula = ft.TextField(label="Cedula", value=persona.get("cedula", ""), border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]), max_length=CEDULA_MAX, input_filter="number")
+        txt_telefono = ft.TextField(label="Telefono", value=persona.get("telefono", ""), border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]), max_length=TELEFONO_MAX, input_filter="number")
         txt_grado = ft.TextField(label="Grado Jerarquico", value=persona.get("grado_jerarquia", ""), border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
         txt_cargo = ft.TextField(label="Cargo", value=persona.get("cargo", ""), expand=True, border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
         txt_dir_dom = ft.TextField(label="Dir. Domiciliaria", value=persona.get("dir_domiciliaria", ""), expand=True, border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
         txt_dir_eme = ft.TextField(label="Dir. Emergencia", value=persona.get("dir_emergencia", ""), expand=True, border_radius=8, filled=True, bgcolor=tc["input_bg"], border_color=tc["input_border"], color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]))
 
+        lbl_error = ft.Text("", color=ft.Colors.RED_400, size=12, visible=False)
+
         def save_edit(e):
+            lbl_error.visible = False
+            lbl_error.update()
+
+            cedula_val = txt_cedula.value or ""
+            telefono_val = txt_telefono.value or ""
+
+            if len(cedula_val) < CEDULA_MIN or len(cedula_val) > CEDULA_MAX:
+                lbl_error.value = f"La cédula debe tener entre {CEDULA_MIN} y {CEDULA_MAX} dígitos"
+                lbl_error.visible = True
+                lbl_error.update()
+                return
+
+            if telefono_val and (len(telefono_val) < TELEFONO_MIN or len(telefono_val) > TELEFONO_MAX):
+                lbl_error.value = f"El teléfono debe tener entre {TELEFONO_MIN} y {TELEFONO_MAX} dígitos"
+                lbl_error.visible = True
+                lbl_error.update()
+                return
+
             datos = {
                 "nombres": txt_nombres.value,
                 "apellidos": txt_apellidos.value,
@@ -312,14 +337,29 @@ class PersonalDashboard(ft.Container):
             }
             ok, err = self.controller.actualizar(persona["id"], datos)
             if ok:
-                self.page.dialog.open = False
-                self.page.snack_bar = ft.SnackBar(ft.Text("Actualizado correctamente"), open=True)
+                self.page.pop_dialog()
+                self.page.snack_bar = ft.SnackBar(
+                    ft.Row([
+                        ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                        ft.Text("Actualizado correctamente", color=ft.Colors.WHITE),
+                    ], spacing=10),
+                    bgcolor=ft.Colors.GREEN_700,
+                    duration=3000,
+                    open=True,
+                )
                 self.load_data()
+                self.page.update()
             else:
-                self.lbl_status.value = err
-                self.update()
+                lbl_error.value = err
+                lbl_error.visible = True
+                lbl_error.update()
 
-        return ft.AlertDialog(
+        def cerrar_dialogo(e):
+            self.page.pop_dialog()
+
+        dlg_ref = [None]
+        dlg_ref[0] = ft.AlertDialog(
+            modal=True,
             title=ft.Text("Editar Personal", weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
             content=ft.Container(
                 width=550,
@@ -328,41 +368,65 @@ class PersonalDashboard(ft.Container):
                     ft.Row([txt_cedula, txt_telefono]),
                     ft.Row([txt_grado, txt_cargo]),
                     ft.Row([txt_dir_dom, txt_dir_eme]),
+                    lbl_error,
                 ], spacing=12, scroll=ft.ScrollMode.AUTO),
             ),
             actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: setattr(self.page.dialog, "open", False) or self.page.update()),
+                ft.TextButton("Cancelar", on_click=cerrar_dialogo),
                 ft.ElevatedButton("Guardar", on_click=save_edit, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700, shape=ft.RoundedRectangleBorder(radius=8))),
             ],
             shape=ft.RoundedRectangleBorder(radius=16),
             bgcolor=tc["bg_dialog"],
         )
+        return dlg_ref[0]
 
     def _on_delete(self, e, personal_id):
-        tc = theme_colors(self.dark_mode)
+        if self.on_delete_personal:
+            self.on_delete_personal(personal_id)
+        else:
+            tc = theme_colors(self.dark_mode)
 
-        def confirm_delete(e):
-            self.page.dialog.open = False
-            ok, err = self.controller.eliminar(personal_id)
-            if ok:
-                self.page.snack_bar = ft.SnackBar(ft.Text("Eliminado correctamente"), open=True)
-                self.load_data()
-            else:
-                self.page.snack_bar = ft.SnackBar(ft.Text(err), open=True)
-            self.page.update()
+            def cerrar_dialogo(e):
+                self.page.pop_dialog()
 
-        self.page.dialog = ft.AlertDialog(
-            title=ft.Text("Confirmar eliminacion", weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-            content=ft.Text("Esta seguro de eliminar este registro? Esta accion no se puede deshacer.", color=tc["text_secondary"]),
-            actions=[
-                ft.TextButton("Cancelar", on_click=lambda e: setattr(self.page.dialog, "open", False) or self.page.update()),
-                ft.ElevatedButton("Eliminar", on_click=confirm_delete, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_700, shape=ft.RoundedRectangleBorder(radius=8))),
-            ],
-            shape=ft.RoundedRectangleBorder(radius=16),
-            bgcolor=tc["bg_dialog"],
-        )
-        self.page.dialog.open = True
-        self.page.update()
+            def confirm_delete(e):
+                self.page.pop_dialog()
+                ok, err = self.controller.eliminar(personal_id)
+                if ok:
+                    self.page.snack_bar = ft.SnackBar(
+                        ft.Row([
+                            ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                            ft.Text("Eliminado correctamente", color=ft.Colors.WHITE),
+                        ], spacing=10),
+                        bgcolor=ft.Colors.GREEN_700,
+                        duration=3000,
+                        open=True,
+                    )
+                    self.load_data()
+                else:
+                    self.page.snack_bar = ft.SnackBar(
+                        ft.Row([
+                            ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
+                            ft.Text(err, color=ft.Colors.WHITE),
+                        ], spacing=10),
+                        bgcolor=ft.Colors.RED_700,
+                        duration=4000,
+                        open=True,
+                    )
+                self.page.update()
+
+            dlg = ft.AlertDialog(
+                modal=True,
+                title=ft.Text("Confirmar eliminacion", weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                content=ft.Text("Esta seguro de eliminar este registro? Esta accion no se puede deshacer.", color=tc["text_secondary"]),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=cerrar_dialogo),
+                    ft.ElevatedButton("Eliminar", on_click=confirm_delete, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_700, shape=ft.RoundedRectangleBorder(radius=8))),
+                ],
+                shape=ft.RoundedRectangleBorder(radius=16),
+                bgcolor=tc["bg_dialog"],
+            )
+            self.page.show_dialog(dlg)
 
     def load_data(self):
         datos = self.controller.obtener_todos()

@@ -151,3 +151,29 @@ class ComisionModel:
             conn.commit()
         finally:
             conn.close()
+
+    @staticmethod
+    def existe_duplicado(datos: dict, excluir_id=None) -> bool:
+        conn = ComisionModel._connect()
+        try:
+            query = """
+                SELECT COUNT(*) FROM comisiones 
+                WHERE personal_id = :personal_id 
+                  AND tipo_comision = :tipo_comision 
+                  AND fecha_desde = :fecha_desde 
+                  AND fecha_hasta = :fecha_hasta
+            """
+            parametros = {
+                "personal_id": datos.get("personal_id"),
+                "tipo_comision": datos.get("tipo_comision"),
+                "fecha_desde": datos.get("fecha_desde"),
+                "fecha_hasta": datos.get("fecha_hasta")
+            }
+            if excluir_id:
+                query += " AND id != :excluir_id"
+                parametros["excluir_id"] = excluir_id
+            
+            count = conn.execute(query, parametros).fetchone()[0]
+            return count > 0
+        finally:
+            conn.close()

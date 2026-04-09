@@ -269,20 +269,36 @@ class ComisionesDashboard(ft.Container):
         tc = theme_colors(self.dark_mode)
 
         def cerrar(e):
-            dlg.open = False
-            self.page.update()
+            self.page.pop_dialog()
 
         def eliminar(e):
-            dlg.open = False
+            self.page.pop_dialog()
             ok, err = self.controller.eliminar(comision_id)
             if ok:
                 self.load_data()
-                self.page.snack_bar = ft.SnackBar(ft.Text("Eliminado correctamente"), open=True)
+                self.page.snack_bar = ft.SnackBar(
+                    ft.Row([
+                        ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
+                        ft.Text("Eliminado correctamente", color=ft.Colors.WHITE),
+                    ], spacing=10),
+                    bgcolor=ft.Colors.GREEN_700,
+                    duration=3000,
+                    open=True,
+                )
             else:
-                self.page.snack_bar = ft.SnackBar(ft.Text(err), open=True)
+                self.page.snack_bar = ft.SnackBar(
+                    ft.Row([
+                        ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
+                        ft.Text(err, color=ft.Colors.WHITE),
+                    ], spacing=10),
+                    bgcolor=ft.Colors.RED_700,
+                    duration=4000,
+                    open=True,
+                )
             self.page.update()
 
         dlg = ft.AlertDialog(
+            modal=True,
             title=ft.Text("Confirmar eliminación", color=tc["text_primary"]),
             content=ft.Text("¿Está seguro? Esta acción no se puede deshacer.", color=tc["text_secondary"]),
             actions=[
@@ -292,9 +308,7 @@ class ComisionesDashboard(ft.Container):
             shape=ft.RoundedRectangleBorder(radius=16),
             bgcolor=tc["bg_dialog"],
         )
-        self.page.dialog = dlg
-        dlg.open = True
-        self.page.update()
+        self.page.show_dialog(dlg)
 
     def load_data(self):
         if self.personal_id:
