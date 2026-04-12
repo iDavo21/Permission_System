@@ -5,6 +5,7 @@ from core.estado_utils import obtener_estado, fecha_a_datetime, obtener_estado_u
 from core.constants import FECHA_FORMAT, TIPOS_PERMISO, DIAS_EXPIRACION_PRONTO
 from core.theme import theme_colors
 from permisos.views.components import SummaryCards, PermisosTable, PaginationBar
+from core.components.loading import LoadingIndicator
 
 
 class AdminView(ft.Container):
@@ -46,6 +47,8 @@ class AdminView(ft.Container):
             on_change_ppp=self.cambiar_registros_pagina,
             dark_mode=self.dark_mode,
         )
+        
+        self.loading_indicator = LoadingIndicator("Cargando permisos...", dark_mode=self.dark_mode)
 
         self._build_ui()
 
@@ -86,34 +89,19 @@ class AdminView(ft.Container):
         )
 
         self.btn_add = ft.Container(
-            content=ft.Icon(ft.Icons.ADD, color=ft.Colors.WHITE, size=24),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=16,
-            padding=16,
-            shadow=ft.BoxShadow(blur_radius=12, spread_radius=2, color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK)),
+            content=ft.Row([
+                ft.Icon(ft.Icons.ADD, color=ft.Colors.WHITE, size=20),
+                ft.Text("Nueva", color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
+            ], spacing=8),
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment.CENTER_LEFT,
+                end=ft.Alignment.CENTER_RIGHT,
+                colors=["#1b5e20", "#2e7d32"],
+            ),
+            border_radius=12,
+            padding=ft.padding.symmetric(horizontal=20, vertical=12),
             ink=True,
             on_click=lambda e: self.on_add_permission() if self.on_add_permission else None,
-            on_hover=self._on_fab_hover,
-        )
-
-        self.fab_tooltip = ft.Container(
-            content=ft.Text("Agregar Permiso", size=13, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
-            bgcolor=tc["bg_dialog"],
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
-            border=ft.border.all(1, ft.Colors.GREY_600),
-            opacity=0,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
-
-        self.fab_wrapper = ft.Container(
-            content=ft.Row([
-                self.fab_tooltip,
-                ft.Container(width=8),
-                self.btn_add,
-            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            right=24,
-            bottom=24,
         )
 
         self.lbl_count = ft.Text("Total: 0", size=13, color=tc["text_secondary"])
@@ -148,6 +136,8 @@ class AdminView(ft.Container):
             expand=True,
             scroll=ft.ScrollMode.AUTO,
         )
+        
+        self.loading_indicator = LoadingIndicator("Cargando permisos...", dark_mode=self.dark_mode)
 
         self.empty_state = ft.Column(
             controls=[
@@ -162,9 +152,19 @@ class AdminView(ft.Container):
                             alignment=ft.Alignment(0, 0),
                         ),
                         ft.Container(height=16),
-                        ft.Text("No hay permisos registrados", size=18, color=tc["empty_text"], weight=ft.FontWeight.W_500),
-                        ft.Text("Haz clic en \"Agregar\" para registrar el primer permiso", size=13, color=tc["empty_subtext"]),
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Text(
+                            "No hay permisos registrados", 
+                            size=20, 
+                            color=tc["empty_text"], 
+                            weight=ft.FontWeight.BOLD
+                        ),
+                        ft.Text(
+                            "Los permisos aparecerán aquí cuando se registren", 
+                            size=14, 
+                            color=tc["empty_subtext"]
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     alignment=ft.Alignment(0, 0),
                 ),
                 ft.Container(expand=True),
@@ -197,10 +197,13 @@ class AdminView(ft.Container):
                                 self.search_field,
                                 ft.Container(width=8),
                                 self.btn_filter,
+                                ft.Container(width=8),
+                                self.btn_add,
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             padding=ft.padding.symmetric(horizontal=24, vertical=16),
                             bgcolor=tc["header_bg"],
                             border=ft.border.all(1, tc["header_border"]),
+                            border_radius=14,
                             margin=ft.margin.only(left=24, right=24, top=16),
                         ),
                         ft.Container(height=12),
@@ -217,7 +220,6 @@ class AdminView(ft.Container):
                     expand=True,
                 ),
                 self._filter_panel_container,
-                self.fab_wrapper,
             ],
             expand=True,
         )
@@ -407,32 +409,30 @@ class AdminView(ft.Container):
                 self.page.update()
         except RuntimeError:
             pass
+            
+    def _show_loading(self, show):
+        # For simplicity, we'll overlay the loading indicator
+        # In a more complex implementation, we might modify the UI structure
+        if show:
+            if not hasattr(self, '_loading_overlay') or not self._loading_overlay:
+                self._loading_overlay = ft.Container(
+                    content=self.loading_indicator,
+                    alignment=ft.Alignment(0, 0),
+                    bgcolor=ft.Colors.with_opacity(0.7, ft.Colors.BLACK),
+                    expand=True,
+                )
+                # Add to the stack
+                if len(self.content.controls) < 3:  # Not already added
+                    self.content.controls.append(self._loading_overlay)
+            self._loading_overlay.visible = True
+        else:
+            if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                self._loading_overlay.visible = False
+        self.update()
 
     def _confirmar_eliminacion(self, permiso_id):
-        tc = theme_colors(self.dark_mode)
-
-        def cerrar_dialogo(e):
-            self.page.pop_dialog()
-
-        def eliminar_y_cerrar(e):
-            self.page.pop_dialog()
-            # Ahora si llamamos al callback (puede desmontar este AdminView)
-            if self.on_delete:
-                self.on_delete(permiso_id)
-
-        dialogo = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Confirmar eliminacion", color=tc["text_primary"]),
-            content=ft.Text("Esta accion no se puede deshacer.", color=tc["text_secondary"]),
-            actions=[
-                ft.TextButton("Cancelar", on_click=cerrar_dialogo),
-                ft.ElevatedButton("Eliminar", on_click=eliminar_y_cerrar, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_700, shape=ft.RoundedRectangleBorder(radius=8))),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-            bgcolor=tc["bg_dialog"],
-        )
-
-        self.page.show_dialog(dialogo)
+        if self.on_delete:
+            self.on_delete(permiso_id)
 
     def load_data(self):
         self.todos_los_permisos = self.todos_los_permisos

@@ -1,12 +1,9 @@
-import sqlite3
 import hashlib
 import os
-
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'usuarios.db')
+from core.database import get_connection
 
 SALT_LENGTH = 32
-DEFAULT_ADMIN_USER = "admin"
-DEFAULT_ADMIN_PASS = "admin123"
+DB_NAME = "usuarios.db"
 
 
 def hash_password(password: str, salt: bytes = None) -> tuple:
@@ -24,11 +21,7 @@ def verify_password(password: str, stored_key: bytes, stored_salt: bytes) -> boo
 class UserModel:
     @staticmethod
     def _connect():
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return get_connection(DB_NAME)
 
     @classmethod
     def create_table(cls):
@@ -50,20 +43,24 @@ class UserModel:
             conn.commit()
         finally:
             conn.close()
-        cls._crear_admin_default()
 
     @classmethod
-    def _crear_admin_default(cls):
+    def crear_admin_default(cls):
+        from core.preferencias import cargar_preferencias
+        prefs = cargar_preferencias()
+        admin_user = prefs.get("admin_username", "admin")
+        admin_pass = prefs.get("admin_password", "admin123")
+        
         conn = cls._connect()
         try:
             existe = conn.execute(
-                "SELECT COUNT(*) FROM usuarios WHERE username = ?", (DEFAULT_ADMIN_USER,)
+                "SELECT COUNT(*) FROM usuarios WHERE username = ?", (admin_user,)
             ).fetchone()[0]
             if not existe:
-                key, salt = hash_password(DEFAULT_ADMIN_PASS)
+                key, salt = hash_password(admin_pass)
                 conn.execute(
                     "INSERT INTO usuarios (username, password_key, password_salt, nombre, rol) VALUES (?, ?, ?, ?, ?)",
-                    (DEFAULT_ADMIN_USER, key, salt, "Administrador", "admin"),
+                    (admin_user, key, salt, "Administrador", "admin"),
                 )
                 conn.commit()
         finally:

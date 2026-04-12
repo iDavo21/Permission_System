@@ -493,7 +493,7 @@ class PermissionView(ft.Container):
             if self.modo_edicion:
                 datos_actuales["id"] = self.permiso_id
             
-            ok, err = self.on_save(datos_actuales) if self.on_save else (None, "No handler")
+            ok, err, msg = self.on_save(datos_actuales) if self.on_save else (None, "No handler", None)
             if err:
                 errores.append(f"{p.get('nombres', '').split(' ')[0]}: {err}")
             else:
@@ -501,26 +501,22 @@ class PermissionView(ft.Container):
 
         if errores:
             msg = "Errores: " + " | ".join(errores)
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
-                    ft.Text(msg, color=ft.Colors.WHITE),
-                ], spacing=10),
+            snack = ft.SnackBar(
+                content=ft.Text(msg),
                 bgcolor=ft.Colors.RED_700,
                 duration=6000,
-                open=True,
             )
+            self.page.controls.append(snack)
+            snack.open = True
         else:
-            msg = "¡Permiso actualizado con éxito!" if self.modo_edicion else f"¡{exitos} permiso(s) registrado(s) con éxito!"
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
-                    ft.Text(msg, color=ft.Colors.WHITE),
-                ], spacing=10),
+            success_msg = msg or ("¡Permiso actualizado con éxito!" if self.modo_edicion else f"¡{exitos} permiso(s) registrado(s) con éxito!")
+            snack = ft.SnackBar(
+                content=ft.Text(success_msg),
                 bgcolor=ft.Colors.GREEN_700,
                 duration=4000,
-                open=True,
             )
+            self.page.controls.append(snack)
+            snack.open = True
 
         self.page.update()
         if exitos > 0 and self.on_back:

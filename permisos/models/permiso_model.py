@@ -1,17 +1,18 @@
-import sqlite3
-import os
+from core.database import get_connection, get_db_path
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'permisos.db')
+DB_NAME = "permisos.db"
+PERSONAL_DB = "personal.db"
+
+
+def _attach_personal(conn):
+    personal_path = get_db_path(PERSONAL_DB)
+    conn.execute(f"ATTACH DATABASE '{personal_path}' AS personal_db")
 
 
 class PermisoModel:
     @staticmethod
     def _connect():
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return get_connection(DB_NAME)
 
     @staticmethod
     def create_table():
@@ -55,35 +56,20 @@ class PermisoModel:
             conn.close()
 
     @staticmethod
-    def _get_personal_info(personal_id):
-        from personal.models.personal_model import PersonalModel
-        return PersonalModel.get_by_id(personal_id)
-
-    @staticmethod
-    def _enrich_row(row_dict):
-        personal = PermisoModel._get_personal_info(row_dict.get("personal_id"))
-        if personal:
-            row_dict.update({
-                "nombres": personal.get("nombres", ""),
-                "apellidos": personal.get("apellidos", ""),
-                "cedula": personal.get("cedula", ""),
-                "telefono": personal.get("telefono", ""),
-                "grado_jerarquia": personal.get("grado_jerarquia", ""),
-                "cargo": personal.get("cargo", ""),
-                "dir_domiciliaria": personal.get("dir_domiciliaria", ""),
-                "dir_emergencia": personal.get("dir_emergencia", ""),
-            })
-        return row_dict
-
-    @staticmethod
     def get_all() -> list:
         conn = PermisoModel._connect()
         try:
+            _attach_personal(conn)
             rows = conn.execute("""
-                SELECT * FROM permisos ORDER BY id DESC
+                SELECT p.*, 
+                       per.nombres, per.apellidos, per.cedula, per.telefono,
+                       per.grado_jerarquia, per.cargo, 
+                       per.dir_domiciliaria, per.dir_emergencia
+                FROM permisos p
+                LEFT JOIN personal_db.personal per ON p.personal_id = per.id
+                ORDER BY p.id DESC
             """).fetchall()
-            result = [PermisoModel._enrich_row(dict(r)) for r in rows]
-            return result
+            return [dict(r) for r in rows]
         finally:
             conn.close()
 
@@ -91,12 +77,17 @@ class PermisoModel:
     def get_by_id(permiso_id: int) -> dict:
         conn = PermisoModel._connect()
         try:
-            row = conn.execute(
-                "SELECT * FROM permisos WHERE id = ?", (permiso_id,)
-            ).fetchone()
-            if row:
-                return PermisoModel._enrich_row(dict(row))
-            return {}
+            _attach_personal(conn)
+            row = conn.execute("""
+                SELECT p.*, 
+                       per.nombres, per.apellidos, per.cedula, per.telefono,
+                       per.grado_jerarquia, per.cargo, 
+                       per.dir_domiciliaria, per.dir_emergencia
+                FROM permisos p
+                LEFT JOIN personal_db.personal per ON p.personal_id = per.id
+                WHERE p.id = ?
+            """, (permiso_id,)).fetchone()
+            return dict(row) if row else {}
         finally:
             conn.close()
 
@@ -104,12 +95,18 @@ class PermisoModel:
     def get_by_personal_id(personal_id: int) -> list:
         conn = PermisoModel._connect()
         try:
-            rows = conn.execute(
-                "SELECT * FROM permisos WHERE personal_id = ? ORDER BY id DESC",
-                (personal_id,),
-            ).fetchall()
-            result = [PermisoModel._enrich_row(dict(r)) for r in rows]
-            return result
+            _attach_personal(conn)
+            rows = conn.execute("""
+                SELECT p.*, 
+                       per.nombres, per.apellidos, per.cedula, per.telefono,
+                       per.grado_jerarquia, per.cargo, 
+                       per.dir_domiciliaria, per.dir_emergencia
+                FROM permisos p
+                LEFT JOIN personal_db.personal per ON p.personal_id = per.id
+                WHERE p.personal_id = ?
+                ORDER BY p.id DESC
+            """, (personal_id,)).fetchall()
+            return [dict(r) for r in rows]
         finally:
             conn.close()
 

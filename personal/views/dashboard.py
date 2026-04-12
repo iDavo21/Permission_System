@@ -2,6 +2,7 @@ import flet as ft
 import asyncio
 from core.theme import theme_colors
 from core.constants import CEDULA_MIN, CEDULA_MAX, TELEFONO_MIN, TELEFONO_MAX
+from core.components.loading import LoadingIndicator
 
 
 class PersonalDashboard(ft.Container):
@@ -15,6 +16,13 @@ class PersonalDashboard(ft.Container):
         self.on_edit_personal = on_edit_personal
         self.on_delete_personal = on_delete_personal
         self.dark_mode = dark_mode
+
+        self.todos_los_registros = []
+        self.registros_filtrados = []
+        self.pagina_actual = 1
+        self.registros_por_pagina = 10
+
+        self.filtros_abiertos = False
 
         self._build_ui()
 
@@ -36,35 +44,28 @@ class PersonalDashboard(ft.Container):
             content_padding=ft.padding.symmetric(horizontal=16, vertical=12),
         )
 
+        self.btn_filter = ft.Container(
+            content=ft.Icon(ft.Icons.FILTER_LIST, color=tc["text_secondary"], size=22),
+            padding=10,
+            border_radius=10,
+            ink=True,
+            on_click=self._toggle_filtros,
+        )
+
         self.btn_add = ft.Container(
-            content=ft.Icon(ft.Icons.ADD, color=ft.Colors.WHITE, size=24),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=16,
-            padding=16,
-            shadow=ft.BoxShadow(blur_radius=12, spread_radius=2, color=ft.Colors.with_opacity(0.4, ft.Colors.BLACK)),
+            content=ft.Row([
+                ft.Icon(ft.Icons.ADD, color=ft.Colors.WHITE, size=20),
+                ft.Text("Nueva", color=ft.Colors.WHITE, size=14, weight=ft.FontWeight.BOLD),
+            ], spacing=8),
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment.CENTER_LEFT,
+                end=ft.Alignment.CENTER_RIGHT,
+                colors=["#1b5e20", "#2e7d32"],
+            ),
+            border_radius=12,
+            padding=ft.padding.symmetric(horizontal=20, vertical=12),
             ink=True,
             on_click=self._on_add,
-            on_hover=self._on_fab_hover,
-        )
-
-        self.fab_tooltip = ft.Container(
-            content=ft.Text("Agregar Personal", size=13, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
-            bgcolor=tc["bg_dialog"],
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=14, vertical=8),
-            border=ft.border.all(1, ft.Colors.GREY_600),
-            opacity=0,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
-
-        self.fab_wrapper = ft.Container(
-            content=ft.Row([
-                self.fab_tooltip,
-                ft.Container(width=8),
-                self.btn_add,
-            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
-            right=24,
-            bottom=24,
         )
 
         self.data_table = ft.DataTable(
@@ -87,16 +88,19 @@ class PersonalDashboard(ft.Container):
         )
 
         self.lbl_count = ft.Text("Total: 0", size=13, color=tc["text_secondary"])
-        self.lbl_status = ft.Text("", size=13, color=ft.Colors.RED_400)
 
         self.stat_total = self._stat_card(ft.Icons.PEOPLE, "0", "Personal Registrado", ft.Colors.GREEN_400)
         self.stat_activos = self._stat_card(ft.Icons.BADGE, "0", "Con Cargo Asignado", ft.Colors.CYAN_400)
         self.stat_grados = self._stat_card(ft.Icons.MILITARY_TECH, "0", "Grados Distintos", ft.Colors.AMBER_400)
 
+        self.lbl_prev = ft.IconButton(icon=ft.Icons.CHEVRON_LEFT, icon_color=tc["text_secondary"], on_click=lambda e: self._cambiar_pagina(-1))
+        self.lbl_next = ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, icon_color=tc["text_secondary"], on_click=lambda e: self._cambiar_pagina(1))
+        self.lbl_page_info = ft.Text("Página 1 de 1", size=13, color=tc["text_secondary"])
+
         self.content_area = ft.Column(
             controls=[
                 ft.Container(
-                    content=ft.Row([self.lbl_count, ft.Container(expand=True), self.lbl_status]),
+                    content=ft.Row([self.lbl_count, ft.Container(expand=True)]),
                     margin=ft.margin.only(left=24, right=24, top=8),
                 ),
                 ft.Container(
@@ -104,12 +108,18 @@ class PersonalDashboard(ft.Container):
                     expand=True,
                     border_radius=14,
                     clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                    margin=ft.margin.only(left=24, right=24, bottom=12),
+                ),
+                ft.Container(
+                    content=ft.Row([self.lbl_prev, self.lbl_page_info, self.lbl_next], alignment=ft.MainAxisAlignment.CENTER),
                     margin=ft.margin.only(left=24, right=24, bottom=16),
                 ),
             ],
             expand=True,
             scroll=ft.ScrollMode.AUTO,
         )
+        
+        self.loading_indicator = LoadingIndicator("Cargando personal...", dark_mode=self.dark_mode)
 
         self.empty_state = ft.Column(
             controls=[
@@ -124,9 +134,19 @@ class PersonalDashboard(ft.Container):
                             alignment=ft.Alignment(0, 0),
                         ),
                         ft.Container(height=16),
-                        ft.Text("No hay personal registrado", size=18, color=tc["empty_text"], weight=ft.FontWeight.W_500),
-                        ft.Text("Haz clic en \"Agregar\" para registrar al primer miembro", size=13, color=tc["empty_subtext"]),
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ft.Text(
+                            "No hay personal registrado", 
+                            size=20, 
+                            color=tc["empty_text"], 
+                            weight=ft.FontWeight.BOLD
+                        ),
+                        ft.Text(
+                            "El personal aparecerá aquí cuando se registre", 
+                            size=14, 
+                            color=tc["empty_subtext"]
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     alignment=ft.Alignment(0, 0),
                 ),
                 ft.Container(expand=True),
@@ -134,6 +154,8 @@ class PersonalDashboard(ft.Container):
             expand=True,
             visible=False,
         )
+
+        self._build_filter_panel(tc)
 
         self.content = ft.Stack(
             controls=[
@@ -155,10 +177,15 @@ class PersonalDashboard(ft.Container):
                                 ], spacing=14),
                                 ft.Container(expand=True),
                                 self.search_field,
+                                ft.Container(width=8),
+                                self.btn_filter,
+                                ft.Container(width=8),
+                                self.btn_add,
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                             padding=ft.padding.symmetric(horizontal=24, vertical=16),
                             bgcolor=tc["header_bg"],
                             border=ft.border.all(1, tc["header_border"]),
+                            border_radius=14,
                             margin=ft.margin.only(left=24, right=24, top=16),
                         ),
                         ft.Container(height=12),
@@ -178,10 +205,95 @@ class PersonalDashboard(ft.Container):
                     ],
                     expand=True,
                 ),
-                self.fab_wrapper,
+                self._filter_panel_container,
             ],
             expand=True,
         )
+
+    def _build_filter_panel(self, tc):
+        self._tipos_grado = self._get_unique_values("grado_jerarquia")
+        self._tipos_cargo = self._get_unique_values("cargo")
+
+        self.filtro_grado = ft.Dropdown(
+            label="Grado",
+            width=180,
+            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(g) for g in self._tipos_grado],
+            value="Todos",
+            border_radius=10,
+            filled=True,
+            bgcolor=tc["input_bg"],
+            border_color=tc["input_border"],
+            color=tc["input_text"],
+            label_style=ft.TextStyle(color=tc["input_label"]),
+        )
+
+        self.filtro_cargo = ft.Dropdown(
+            label="Cargo",
+            width=180,
+            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(c) for c in self._tipos_cargo],
+            value="Todos",
+            border_radius=10,
+            filled=True,
+            bgcolor=tc["input_bg"],
+            border_color=tc["input_border"],
+            color=tc["input_text"],
+            label_style=ft.TextStyle(color=tc["input_label"]),
+        )
+
+        self.btn_aplicar_filtros = ft.Container(
+            content=ft.Text("Aplicar", color=ft.Colors.WHITE, size=13, weight=ft.FontWeight.BOLD),
+            bgcolor=ft.Colors.GREEN_700,
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ink=True,
+            on_click=lambda e: self._aplicar_filtros(),
+        )
+
+        self.btn_limpiar_filtros = ft.Container(
+            content=ft.Text("Limpiar", color=tc["text_secondary"], size=13),
+            border=ft.border.all(1, tc["border_primary"]),
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            ink=True,
+            on_click=lambda e: self._limpiar_filtros(),
+        )
+
+        self._filter_panel = ft.Container(
+            content=ft.Column([
+                ft.Text("Filtros", size=16, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                ft.Container(height=12),
+                ft.Row([self.filtro_grado, ft.Container(width=12), self.filtro_cargo]),
+                ft.Container(height=12),
+                ft.Row([self.btn_aplicar_filtros, ft.Container(width=8), self.btn_limpiar_filtros]),
+            ], spacing=0),
+            bgcolor=tc["bg_dialog"],
+            border=ft.border.all(1, tc["border_primary"]),
+            border_radius=12,
+            padding=16,
+            width=420,
+            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK)),
+        )
+
+        self._filter_panel_container = ft.Container(
+            content=ft.Row([
+                self._filter_panel,
+            ], alignment=ft.MainAxisAlignment.END),
+            padding=ft.padding.only(right=24),
+            top=145,
+            right=0,
+            left=0,
+            opacity=0,
+            visible=False,
+            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
+        )
+
+    def _get_unique_values(self, field):
+        valores = set()
+        for p in self.todos_los_registros:
+            val = p.get(field, "")
+            if val:
+                valores.add(val)
+        return sorted(valores)
 
     def _stat_card(self, icon, value, label, accent):
         tc = theme_colors(self.dark_mode)
@@ -209,38 +321,103 @@ class PersonalDashboard(ft.Container):
     def _show_empty(self, show):
         self.empty_state.visible = show
         self.content_area.visible = not show
+        
+    def _show_loading(self, show):
+        # For simplicity, we'll overlay the loading indicator
+        # In a more complex implementation, we might modify the UI structure
+        if show:
+            if not hasattr(self, '_loading_overlay') or not self._loading_overlay:
+                self._loading_overlay = ft.Container(
+                    content=self.loading_indicator,
+                    alignment=ft.Alignment(0, 0),
+                    bgcolor=ft.Colors.with_opacity(0.7, ft.Colors.BLACK),
+                    expand=True,
+                )
+                # Add to the stack
+                if len(self.content.controls) < 3:  # Not already added
+                    self.content.controls.append(self._loading_overlay)
+            self._loading_overlay.visible = True
+        else:
+            if hasattr(self, '_loading_overlay') and self._loading_overlay:
+                self._loading_overlay.visible = False
+        self.update()
+
+    def _toggle_filtros(self, e):
+        self.filtros_abiertos = not self.filtros_abiertos
+        self._filter_panel_container.visible = self.filtros_abiertos
+        self._filter_panel_container.opacity = 1.0 if self.filtros_abiertos else 0.0
+        self._filter_panel_container.update()
+
+    def _aplicar_filtros(self):
+        texto = (self.search_field.value or "").strip().lower()
+        grado = self.filtro_grado.value
+        cargo = self.filtro_cargo.value
+
+        resultado = []
+        for p in self.todos_los_registros:
+            if texto:
+                nombre_completo = "%s %s" % (p.get("nombres", ""), p.get("apellidos", "")).lower()
+                cedula = p.get("cedula", "").lower()
+                if texto not in nombre_completo and texto not in cedula:
+                    continue
+
+            if grado and grado != "Todos":
+                if p.get("grado_jerarquia", "") != grado:
+                    continue
+
+            if cargo and cargo != "Todos":
+                if p.get("cargo", "") != cargo:
+                    continue
+
+            resultado.append(p)
+
+        self.registros_filtrados = resultado
+        self.pagina_actual = 1
+        self._render_table()
+        self._toggle_filtros(None)
+
+    def _limpiar_filtros(self):
+        self.search_field.value = ""
+        self.filtro_grado.value = "Todos"
+        self.filtro_cargo.value = "Todos"
+        self.registros_filtrados = list(self.todos_los_registros)
+        self.pagina_actual = 1
+        self._render_table()
+        self._toggle_filtros(None)
 
     def _on_search(self, e):
-        termino = self.search_field.value.strip()
-        if termino:
-            results = self.controller.buscar(termino)
-        else:
-            results = self.controller.obtener_todos()
-        self._render_table(results)
+        self._aplicar_filtros()
 
     def _on_add(self, e):
         if self.on_add_personal:
             self.on_add_personal()
 
-    def _render_table(self, datos):
+    def _render_table(self):
         tc = theme_colors(self.dark_mode)
         self.data_table.rows.clear()
-        total = len(datos)
+        total = len(self.registros_filtrados)
         self.lbl_count.value = "Total: %d" % total
+
+        total_paginas = max(1, (total + self.registros_por_pagina - 1) // self.registros_por_pagina)
+        self.pagina_actual = max(1, min(self.pagina_actual, total_paginas))
+
+        inicio = (self.pagina_actual - 1) * self.registros_por_pagina
+        fin = inicio + self.registros_por_pagina
+        pagina = self.registros_filtrados[inicio:fin]
 
         cargos = set()
         grados = set()
-        for p in datos:
+        for p in self.todos_los_registros:
             if p.get("cargo"):
                 cargos.add(p["cargo"])
             if p.get("grado_jerarquia"):
                 grados.add(p["grado_jerarquia"])
 
-        self.stat_total.content.controls[1].value = str(total)
+        self.stat_total.content.controls[1].value = str(len(self.todos_los_registros))
         self.stat_activos.content.controls[1].value = str(len(cargos))
         self.stat_grados.content.controls[1].value = str(len(grados))
 
-        for idx, p in enumerate(datos, start=1):
+        for idx, p in enumerate(pagina, start=inicio + 1):
             nombre_completo = "%s %s" % (p.get("nombres", ""), p.get("apellidos", ""))
             self.data_table.rows.append(
                 ft.DataRow(
@@ -281,8 +458,19 @@ class PersonalDashboard(ft.Container):
                 ),
             )
 
+        self.lbl_page_info.value = "Página %d de %d" % (self.pagina_actual, total_paginas)
+        self.lbl_prev.disabled = self.pagina_actual <= 1
+        self.lbl_next.disabled = self.pagina_actual >= total_paginas
+
         self._show_empty(total == 0)
         self.update()
+
+    def _cambiar_pagina(self, delta):
+        total_paginas = max(1, (len(self.registros_filtrados) + self.registros_por_pagina - 1) // self.registros_por_pagina)
+        nueva = self.pagina_actual + delta
+        if 1 <= nueva <= total_paginas:
+            self.pagina_actual = nueva
+            self._render_table()
 
     def _on_edit(self, e, personal_id):
         if self.on_edit_personal:
@@ -429,8 +617,25 @@ class PersonalDashboard(ft.Container):
             self.page.show_dialog(dlg)
 
     def load_data(self):
+        # Show loading state
+        self._show_loading(True)
+        
+        # Simulate async data loading (replace with actual async call if needed)
+        import asyncio
+        async def load_data_async():
+            datos = self.controller.obtener_todos()
+            self.todos_los_registros = datos
+            self.registros_filtrados = list(datos)
+            self._render_table()
+            self._show_loading(False)
+        
+        # For now, we'll do it synchronously but show loading briefly
+        # In a real app, this would be truly async
         datos = self.controller.obtener_todos()
-        self._render_table(datos)
+        self.todos_los_registros = datos
+        self.registros_filtrados = list(datos)
+        self._render_table()
+        self._show_loading(False)
 
     def did_mount(self):
         self.load_data()

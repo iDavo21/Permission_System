@@ -104,33 +104,25 @@ class ComisionForm(ft.Container):
             label_style=ft.TextStyle(color=tc["input_label"]),
         )
 
-        self.fecha_desde = None
-        self.input_desde = ft.TextField(
+        self.fecha_salida = None
+        self.input_salida = ft.TextField(
             expand=True, read_only=True, hint_text="DD/MM/AAAA",
             bgcolor=tc["input_bg"], border_color=tc["input_border"],
             color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]),
+            label="Fecha de salida"
         )
-        self.btn_desde = ft.IconButton(icon=ft.Icons.CALENDAR_TODAY, icon_color=tc["text_secondary"], on_click=self.abrir_calendario_desde)
-        self.dp_desde = ft.DatePicker(
+        self.btn_salida = ft.IconButton(icon=ft.Icons.CALENDAR_TODAY, icon_color=tc["text_secondary"], on_click=self.abrir_calendario_salida)
+        self.dp_salida = ft.DatePicker(
             first_date=datetime(2000, 1, 1),
             last_date=datetime(2050, 12, 31),
-            on_change=self.cambio_desde,
+            on_change=self.cambio_salida,
         )
 
-        self.fecha_hasta = None
-        self.input_hasta = ft.TextField(
-            expand=True, read_only=True, hint_text="DD/MM/AAAA",
-            bgcolor=tc["input_bg"], border_color=tc["input_border"],
-            color=tc["input_text"], label_style=ft.TextStyle(color=tc["input_label"]),
+        self.chk_finalizada = ft.Switch(
+            label="Comisión finalizada (retornado)",
+            value=False,
+            active_color=ft.Colors.GREEN_400,
         )
-        self.btn_hasta = ft.IconButton(icon=ft.Icons.CALENDAR_TODAY, icon_color=tc["text_secondary"], on_click=self.abrir_calendario_hasta)
-        self.dp_hasta = ft.DatePicker(
-            first_date=datetime(2000, 1, 1),
-            last_date=datetime(2050, 12, 31),
-            on_change=self.cambio_hasta,
-        )
-
-        self.lbl_total_dias = ft.Text("Días totales: —", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400, size=14)
 
         self.observaciones = ft.TextField(
             label="Observaciones", icon=ft.Icons.NOTES,
@@ -147,13 +139,11 @@ class ComisionForm(ft.Container):
                 self.tipo_comision.value = datos.get("tipo_comision", "")
                 self.destino.value = datos.get("destino", "")
                 self.txt_fecha_elaboracion.value = datos.get("fecha_elaboracion", "")
-                self.input_desde.value = datos.get("fecha_desde", "")
-                self.input_hasta.value = datos.get("fecha_hasta", "")
+                self.input_salida.value = datos.get("fecha_salida", "")
+                self.chk_finalizada.value = bool(datos.get("finalizada", 0))
                 self.observaciones.value = datos.get("observaciones", "")
                 try:
-                    self.fecha_desde = datetime.strptime(self.input_desde.value, FECHA_FORMAT)
-                    self.fecha_hasta = datetime.strptime(self.input_hasta.value, FECHA_FORMAT)
-                    self.calcular_dias()
+                    self.fecha_salida = datetime.strptime(self.input_salida.value, FECHA_FORMAT)
                 except ValueError:
                     pass
 
@@ -210,15 +200,11 @@ class ComisionForm(ft.Container):
                 self.tipo_comision,
                 self.destino,
                 self.txt_fecha_elaboracion,
-                seccion_titulo("Periodo", ft.Icons.DATE_RANGE),
-                ft.Row([self.input_desde, self.btn_desde], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
-                ft.Row([ft.Icon(ft.Icons.ARROW_DOWNWARD, color=tc["text_tertiary"], size=20),
-                        ft.Text("hasta", color=tc["text_tertiary"], size=12)],
-                       alignment=ft.MainAxisAlignment.CENTER, spacing=4),
-                ft.Row([self.input_hasta, self.btn_hasta], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
+                seccion_titulo("Salida", ft.Icons.FLIGHT_TAKEOFF),
+                ft.Row([self.input_salida, self.btn_salida], vertical_alignment=ft.CrossAxisAlignment.CENTER, width=W_FULL),
                 ft.Container(height=10),
-                ft.Container(content=self.lbl_total_dias, bgcolor=tc["badge_green"], border_radius=8,
-                             padding=ft.padding.symmetric(horizontal=14, vertical=8), width=W_FULL),
+                seccion_titulo("Estado", ft.Icons.CHECK_CIRCLE),
+                self.chk_finalizada,
                 seccion_titulo("Observaciones", ft.Icons.NOTES),
                 self.observaciones,
                 ft.Divider(color=tc["divider"]),
@@ -336,47 +322,17 @@ class ComisionForm(ft.Container):
         self.page.show_dialog(modal)
 
 
-    def abrir_calendario_desde(self, e):
-        if self.dp_desde not in self.page.overlay:
-            self.page.overlay.append(self.dp_desde)
-        self.dp_desde.open = True
+    def abrir_calendario_salida(self, e):
+        if self.dp_salida not in self.page.overlay:
+            self.page.overlay.append(self.dp_salida)
+        self.dp_salida.open = True
         self.page.update()
 
-    def abrir_calendario_hasta(self, e):
-        if self.dp_hasta not in self.page.overlay:
-            self.page.overlay.append(self.dp_hasta)
-        self.dp_hasta.open = True
-        self.page.update()
-
-    def cambio_desde(self, e):
-        if self.dp_desde.value:
-            self.fecha_desde = self.dp_desde.value
-            self.input_desde.value = self.fecha_desde.strftime(FECHA_FORMAT)
-            self.input_desde.update()
-            self.calcular_dias()
-
-    def cambio_hasta(self, e):
-        if self.dp_hasta.value:
-            self.fecha_hasta = self.dp_hasta.value
-            self.input_hasta.value = self.fecha_hasta.strftime(FECHA_FORMAT)
-            self.input_hasta.update()
-            self.calcular_dias()
-
-    def calcular_dias(self):
-        if self.fecha_desde and self.fecha_hasta:
-            desde = self.fecha_desde.replace(tzinfo=None) if self.fecha_desde.tzinfo else self.fecha_desde
-            hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
-            diff = (hasta - desde).days
-            if diff < 0:
-                self.lbl_total_dias.value = "Fechas inválidas"
-                self.lbl_total_dias.color = ft.Colors.RED_700
-            else:
-                self.lbl_total_dias.value = "Días totales: %d" % (diff + 1)
-                self.lbl_total_dias.color = ft.Colors.GREEN_400
-            try:
-                self.lbl_total_dias.update()
-            except Exception:
-                pass
+    def cambio_salida(self, e):
+        if self.dp_salida.value:
+            self.fecha_salida = self.dp_salida.value
+            self.input_salida.value = self.fecha_salida.strftime(FECHA_FORMAT)
+            self.input_salida.update()
 
     def _guardar(self, e):
         if not self.personal_seleccionados:
@@ -397,45 +353,36 @@ class ComisionForm(ft.Container):
             vacios.append("Tipo de Comisión")
         if not self.destino.value:
             vacios.append("Destino")
-        if not self.input_desde.value:
-            vacios.append("Fecha Inicio")
-        if not self.input_hasta.value:
-            vacios.append("Fecha Vencimiento")
+        if not self.input_salida.value:
+            vacios.append("Fecha de Salida")
         if vacios:
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
-                    ft.Text("Campos obligatorios: %s" % ", ".join(vacios), color=ft.Colors.WHITE),
-                ], spacing=10),
+            snack = ft.SnackBar(
+                content=ft.Text("Campos obligatorios: %s" % ", ".join(vacios)),
                 bgcolor=ft.Colors.RED_700,
                 duration=4000,
-                open=True,
             )
+            self.page.controls.append(snack)
+            snack.open = True
             self.page.update()
             return
 
-        if self.fecha_desde and self.fecha_hasta:
-            desde = self.fecha_desde.replace(tzinfo=None) if self.fecha_desde.tzinfo else self.fecha_desde
-            hasta = self.fecha_hasta.replace(tzinfo=None) if self.fecha_hasta.tzinfo else self.fecha_hasta
-            if desde > hasta:
-                self.page.snack_bar = ft.SnackBar(
-                    ft.Row([
-                        ft.Icon(ft.Icons.WARNING, color=ft.Colors.WHITE, size=20),
-                        ft.Text("La fecha de inicio debe ser anterior al vencimiento", color=ft.Colors.WHITE),
-                    ], spacing=10),
-                    bgcolor=ft.Colors.RED_700,
-                    duration=4000,
-                    open=True,
-                )
-                self.page.update()
-                return
+        if not self.input_salida.value:
+            self.page.snack_bar = ft.SnackBar(
+                content=ft.Text("La fecha de salida es obligatoria"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+            )
+            self.page.controls.append(self.page.snack_bar)
+            self.page.snack_bar.open = True
+            self.page.update()
+            return
 
         datos_base = {
             "tipo_comision": self.tipo_comision.value,
             "destino": self.destino.value,
             "fecha_elaboracion": self.txt_fecha_elaboracion.value,
-            "fecha_desde": self.input_desde.value,
-            "fecha_hasta": self.input_hasta.value,
+            "fecha_salida": self.input_salida.value,
+            "finalizada": 1 if self.chk_finalizada.value else 0,
             "observaciones": self.observaciones.value,
         }
 
@@ -449,9 +396,9 @@ class ComisionForm(ft.Container):
 
             if self.modo_edicion:
                 datos_actuales["id"] = self.comision_id
-                ok, err = self.controller.actualizar(self.comision_id, datos_actuales)
+                ok, err, msg = self.controller.actualizar(self.comision_id, datos_actuales)
             else:
-                ok, err = self.controller.guardar(datos_actuales)
+                ok, err, msg = self.controller.guardar(datos_actuales)
 
             if err:
                 errores.append(f"{p.get('nombres','').split(' ')[0]}: {err}")
@@ -461,26 +408,22 @@ class ComisionForm(ft.Container):
 
         if errores:
             msg = "Errores: " + " | ".join(errores)
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.ERROR, color=ft.Colors.WHITE, size=20),
-                    ft.Text(msg, color=ft.Colors.WHITE),
-                ], spacing=10),
+            snack = ft.SnackBar(
+                content=ft.Text(msg),
                 bgcolor=ft.Colors.RED_700,
                 duration=6000,
-                open=True,
             )
+            self.page.controls.append(snack)
+            snack.open = True
         else:
-            msg = "¡Comisión actualizada!" if self.modo_edicion else f"¡{exitos} comisión(es) registrada(s)!"
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
-                    ft.Text(msg, color=ft.Colors.WHITE),
-                ], spacing=10),
+            success_msg = msg or ("¡Comisión actualizada!" if self.modo_edicion else f"¡{exitos} comisión(es) registrada(s)!")
+            snack = ft.SnackBar(
+                content=ft.Text(success_msg),
                 bgcolor=ft.Colors.GREEN_700,
                 duration=4000,
-                open=True,
             )
+            self.page.controls.append(snack)
+            snack.open = True
         
         self.page.update()
         if al_menos_uno_exitoso and self.on_save:

@@ -176,23 +176,25 @@ class PersonalForm(ft.Container):
         }
 
         if self.is_edit:
-            pid, err = self.controller.actualizar(self.personal_id, datos)
+            pid, err, msg = self.controller.actualizar(self.personal_id, datos)
         else:
-            pid, err = self.controller.guardar(datos)
+            pid, err, msg = self.controller.guardar(datos)
+        
         if err:
             self.lbl_error.value = err
             self.update()
         else:
-            msg = "Personal actualizado correctamente" if self.is_edit else "Personal registrado correctamente"
-            self.page.snack_bar = ft.SnackBar(
-                ft.Row([
-                    ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
-                    ft.Text(msg, color=ft.Colors.WHITE),
-                ], spacing=10),
+            if not msg:
+                nombre = f"{datos.get('nombres', '')} {datos.get('apellidos', '')}"
+                msg = f"✓ {nombre} registrado exitosamente" if not self.is_edit else "✓ Datos actualizados correctamente"
+            snack = ft.SnackBar(
+                content=ft.Text(msg),
                 bgcolor=ft.Colors.GREEN_700,
-                duration=3000,
-                open=True,
+                duration=4000,
             )
+            self.page.controls.append(snack)
+            snack.open = True
+            self.page.update()
             self.on_save(pid)
 
     def did_mount(self):

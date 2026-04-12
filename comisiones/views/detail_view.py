@@ -20,7 +20,13 @@ class ComisionDetailView(ft.Container):
 
         W_FULL = 440
 
-        estado_texto, estado_color = obtener_estado(datos.get("fecha_hasta", ""))
+        finalizada = datos.get("finalizada", 0)
+        if finalizada:
+            estado_texto = "FINALIZADA"
+            estado_color = ft.Colors.GREEN_700
+        else:
+            estado_texto = "ACTIVA"
+            estado_color = ft.Colors.ORANGE_700
 
         badge_estado = ft.Container(
             content=ft.Text(estado_texto, size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
@@ -55,20 +61,7 @@ class ComisionDetailView(ft.Container):
                 padding=ft.padding.only(top=12, bottom=2),
             )
 
-        fecha_desde_str = datos.get("fecha_desde", "")
-        fecha_hasta_str = datos.get("fecha_hasta", "")
-        lbl_dias = ft.Text("", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400, size=14)
-        try:
-            fd = datetime.strptime(fecha_desde_str, FECHA_FORMAT)
-            fh = datetime.strptime(fecha_hasta_str, FECHA_FORMAT)
-            diff = (fh - fd).days
-            if diff >= 0:
-                lbl_dias.value = "Duración: %d día(s)" % (diff + 1)
-            else:
-                lbl_dias.value = "Fechas inválidas"
-                lbl_dias.color = ft.Colors.RED_700
-        except (ValueError, TypeError):
-            pass
+        fecha_salida_str = datos.get("fecha_salida", "")
 
         btn_editar = ft.ElevatedButton(
             "Editar Comisión", icon=ft.Icons.EDIT_OUTLINED,
@@ -98,12 +91,7 @@ class ComisionDetailView(ft.Container):
                 campo_ro("Tipo de Comisión", datos.get("tipo_comision"), ft.Icons.CATEGORY, width=W_FULL),
                 campo_ro("Destino", datos.get("destino"), ft.Icons.LOCATION_ON, width=W_FULL),
                 campo_ro("Fecha de Elaboración", datos.get("fecha_elaboracion"), ft.Icons.EDIT_DOCUMENT, width=W_FULL),
-                ft.Row([campo_ro("Inicio", fecha_desde_str, ft.Icons.EVENT_AVAILABLE, expand=True),
-                        campo_ro("Vencimiento", fecha_hasta_str, ft.Icons.EVENT_BUSY, expand=True)],
-                       spacing=15, width=W_FULL),
-                ft.Container(content=lbl_dias, bgcolor=tc["badge_green"], border_radius=8,
-                             padding=ft.padding.symmetric(horizontal=14, vertical=6),
-                             width=W_FULL, visible=bool(lbl_dias.value)),
+                campo_ro("Fecha de Salida", fecha_salida_str, ft.Icons.FLIGHT_TAKEOFF, width=W_FULL),
                 seccion_titulo("Observaciones", ft.Icons.NOTES),
                 campo_ro("Observaciones", datos.get("observaciones"), ft.Icons.NOTES, width=W_FULL),
                 ft.Divider(color=tc["divider"]),

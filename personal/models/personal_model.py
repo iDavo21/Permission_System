@@ -1,17 +1,13 @@
-import sqlite3
-import os
+from core.database import get_connection
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'personal.db')
+DB_NAME = "personal.db"
 
 
 class PersonalModel:
+    """Modelo DAO para la gestión de personal."""
     @staticmethod
     def _connect():
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        return get_connection(DB_NAME)
 
     @staticmethod
     def create_table():
@@ -42,6 +38,7 @@ class PersonalModel:
 
     @staticmethod
     def save(datos: dict) -> int:
+        """Guarda un nuevo registro de personal."""
         conn = PersonalModel._connect()
         try:
             cursor = conn.execute("""
@@ -60,6 +57,7 @@ class PersonalModel:
 
     @staticmethod
     def get_all() -> list:
+        """Obtiene todos los registros de personal."""
         conn = PersonalModel._connect()
         try:
             rows = conn.execute(
@@ -71,6 +69,7 @@ class PersonalModel:
 
     @staticmethod
     def get_by_id(personal_id: int) -> dict:
+        """Obtiene un registro de personal por ID."""
         conn = PersonalModel._connect()
         try:
             row = conn.execute(
@@ -82,6 +81,7 @@ class PersonalModel:
 
     @staticmethod
     def update(personal_id: int, datos: dict):
+        """Actualiza un registro de personal."""
         datos['id'] = personal_id
         conn = PersonalModel._connect()
         try:
@@ -104,10 +104,9 @@ class PersonalModel:
 
     @staticmethod
     def delete(personal_id: int):
+        """Elimina un registro de personal."""
         conn = PersonalModel._connect()
         try:
-            conn.execute("DELETE FROM permisos WHERE personal_id = ?", (personal_id,))
-            conn.execute("DELETE FROM comisiones WHERE personal_id = ?", (personal_id,))
             conn.execute("DELETE FROM personal WHERE id = ?", (personal_id,))
             conn.commit()
         finally:
@@ -115,6 +114,7 @@ class PersonalModel:
 
     @staticmethod
     def existe_cedula(cedula: str, excluir_id: int = None) -> bool:
+        """Verifica si una cédula ya existe."""
         conn = PersonalModel._connect()
         try:
             if excluir_id:
@@ -133,6 +133,7 @@ class PersonalModel:
 
     @staticmethod
     def buscar(termino: str) -> list:
+        """Busca personal por término."""
         conn = PersonalModel._connect()
         try:
             t = "%%%s%%" % termino
@@ -147,6 +148,7 @@ class PersonalModel:
 
     @staticmethod
     def contar() -> int:
+        """Cuenta el total de registros."""
         conn = PersonalModel._connect()
         try:
             row = conn.execute("SELECT COUNT(*) FROM personal").fetchone()

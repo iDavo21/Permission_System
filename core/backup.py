@@ -44,3 +44,37 @@ def listar_backups():
     if not os.path.exists(BACKUP_DIR):
         return []
     return sorted(os.listdir(BACKUP_DIR), reverse=True)
+
+
+def obtener_lista_backups():
+    if not os.path.exists(BACKUP_DIR):
+        return []
+    
+    backups = []
+    for nombre in sorted(os.listdir(BACKUP_DIR), reverse=True):
+        ruta = os.path.join(BACKUP_DIR, nombre)
+        if os.path.isdir(ruta):
+            fecha = datetime.fromtimestamp(os.path.getmtime(ruta)).strftime("%d/%m/%Y %H:%M")
+            tamano = sum(os.path.getsize(os.path.join(ruta, f)) for f in os.listdir(ruta) if os.path.isfile(os.path.join(ruta, f)))
+            backups.append({
+                'nombre': nombre,
+                'fecha': fecha,
+                'tamano': tamano,
+            })
+    return backups
+
+
+def restaurar_backup(nombre_backup):
+    ruta_backup = os.path.join(BACKUP_DIR, nombre_backup)
+    if not os.path.exists(ruta_backup):
+        raise RuntimeError(f"Backup '{nombre_backup}' no encontrado")
+    
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+    dbs = ['personal.db', 'permisos.db', 'comisiones.db', 'usuarios.db']
+    
+    for db in dbs:
+        src = os.path.join(ruta_backup, db)
+        if os.path.exists(src):
+            shutil.copy2(src, os.path.join(data_dir, db))
+    
+    return True

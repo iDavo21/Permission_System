@@ -1,10 +1,10 @@
 from permisos.models.permiso_model import PermisoModel
-from core.logger import logger
+from core.logger import logger, LoggerMixin
 
 
-class PermisosController:
+class PermisosController(LoggerMixin):
     def __init__(self):
-        PermisoModel.create_table()
+        pass
 
     def obtener_todos(self):
         return PermisoModel.get_all()
@@ -17,40 +17,40 @@ class PermisosController:
 
     def guardar(self, datos):
         if PermisoModel.existe_duplicado(datos):
-            return None, "Ya existe un permiso idéntico para este personal en ese rango de fechas."
+            return None, "Ya existe un permiso idéntico para este personal en ese rango de fechas.", None
         try:
             pid = PermisoModel.save(datos)
-            logger.info(f"Permiso creado ID: {pid} - Personal: {datos.get('personal_id')}")
-            return pid, None
+            self.log_info("Permiso creado", permiso_id=pid, personal_id=datos.get('personal_id'), tipo=datos.get('tipo_permiso'))
+            return pid, None, "✓ Permiso registrado exitosamente"
         except Exception as e:
-            logger.error(f"Error al crear permiso: {str(e)}")
-            return None, str(e)
+            self.log_error("Error al crear permiso", error=e, personal_id=datos.get('personal_id'))
+            return None, str(e), None
 
     def actualizar(self, permiso_id, datos):
         if PermisoModel.existe_duplicado(datos, excluir_id=permiso_id):
-            return None, "Ya existe otro permiso idéntico para este personal en ese rango de fechas."
+            return None, "Ya existe otro permiso idéntico para este personal en ese rango de fechas.", None
         try:
             PermisoModel.update(permiso_id, datos)
-            logger.info(f"Permiso actualizado ID: {permiso_id}")
-            return True, None
+            self.log_info("Permiso actualizado", permiso_id=permiso_id, personal_id=datos.get('personal_id'))
+            return True, None, "✓ Permiso actualizado correctamente"
         except Exception as e:
-            logger.error(f"Error al actualizar permiso ID {permiso_id}: {str(e)}")
-            return None, str(e)
+            self.log_error("Error al actualizar permiso", error=e, permiso_id=permiso_id)
+            return None, str(e), None
 
     def eliminar(self, permiso_id):
         try:
             PermisoModel.delete(permiso_id)
-            logger.info(f"Permiso eliminado ID: {permiso_id}")
-            return True, None
+            self.log_info("Permiso eliminado", permiso_id=permiso_id)
+            return True, None, "✓ Permiso eliminado correctamente"
         except Exception as e:
-            logger.error(f"Error al eliminar permiso ID {permiso_id}: {str(e)}")
-            return None, str(e)
+            self.log_error("Error al eliminar permiso", error=e, permiso_id=permiso_id)
+            return None, str(e), None
 
     def eliminar_por_personal(self, personal_id):
         try:
             PermisoModel.delete_by_personal_id(personal_id)
-            logger.info(f"Permisos eliminados para personal ID: {personal_id}")
-            return True, None
+            self.log_info("Permisos eliminados para personal", personal_id=personal_id)
+            return True, None, "✓ Permisos eliminados correctamente"
         except Exception as e:
-            logger.error(f"Error al eliminar permisos para personal ID {personal_id}: {str(e)}")
-            return None, str(e)
+            self.log_error("Error al eliminar permisos", error=e, personal_id=personal_id)
+            return None, str(e), None
