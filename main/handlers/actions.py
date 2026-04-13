@@ -233,3 +233,50 @@ def mostrar_dialogo_limpiar_permisos(app):
         shape=ft.RoundedRectangleBorder(radius=16),
     )
     app.page.show_dialog(dlg)
+
+
+def eliminar_situacion(app, situacion_id):
+    from core.theme import theme_colors
+    tc = theme_colors(app.dark_mode)
+    
+    def confirmar(e):
+        app.page.pop_dialog()
+        ok, err, msg = app.situaciones_ctrl.eliminar(situacion_id)
+        if ok:
+            snack = ft.SnackBar(
+                content=ft.Text(msg or "Situación eliminada correctamente"),
+                bgcolor=ft.Colors.GREEN_700,
+                duration=3000,
+            )
+            app.page.controls.append(snack)
+            snack.open = True
+            app._go_to_situaciones()
+        else:
+            snack = ft.SnackBar(
+                content=ft.Text(err or "Error al eliminar"),
+                bgcolor=ft.Colors.RED_700,
+                duration=4000,
+            )
+            app.page.controls.append(snack)
+            snack.open = True
+        app.page.update()
+
+    def cancelar(e):
+        app.page.pop_dialog()
+
+    dlg = ft.AlertDialog(
+        modal=True,
+        title=ft.Row([ft.Icon(ft.Icons.WARNING, color=ft.Colors.RED_400, size=24),
+            ft.Text("Eliminar Situación Irregular", size=18, weight=ft.FontWeight.BOLD, color=tc["text_primary"])], spacing=10),
+        content=ft.Text("¿Estás seguro de eliminar esta situación irregular?\nEsta acción no se puede deshacer.", color=tc["text_secondary"]),
+        actions=[
+            ft.TextButton("Cancelar", on_click=cancelar),
+            ft.ElevatedButton("Eliminar", on_click=confirmar,
+                style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_700,
+                    shape=ft.RoundedRectangleBorder(radius=8))),
+        ],
+        actions_alignment=ft.MainAxisAlignment.END,
+        bgcolor=tc["bg_dialog"],
+        shape=ft.RoundedRectangleBorder(radius=16),
+    )
+    app.page.show_dialog(dlg)

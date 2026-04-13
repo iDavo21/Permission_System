@@ -25,11 +25,13 @@ class MainApp:
         from personal.controller import PersonalController
         from permisos.controller import PermisosController
         from comisiones.controller import ComisionesController
+        from situaciones_irregulares.controller import SituacionesController
         
         self.auth_ctrl = AuthController()
         self.personal_ctrl = PersonalController()
         self.permisos_ctrl = PermisosController()
         self.comisiones_ctrl = ComisionesController()
+        self.situaciones_ctrl = SituacionesController()
 
         self.usuario_actual = None
         self.current_section = "inicio"
@@ -85,7 +87,7 @@ class MainApp:
         self.current_section = section
         self.sidebar.update_active(section)
         
-        from main.sections import inicio, personal, permisos, comisiones, configuracion
+        from main.sections import inicio, personal, permisos, comisiones, situaciones, configuracion
         
         if section == "inicio":
             self.content_area.content = inicio.build(self)
@@ -95,6 +97,8 @@ class MainApp:
             self.content_area.content = permisos.build(self)
         elif section == "comisiones":
             self.content_area.content = comisiones.build(self)
+        elif section == "situaciones":
+            self.content_area.content = situaciones.build(self)
         elif section == "configuracion":
             self.content_area.content = configuracion.build(self)
         
@@ -234,6 +238,9 @@ class MainApp:
     def _go_to_comisiones(self):
         self._load_section_content("comisiones")
 
+    def _go_to_situaciones(self):
+        self._load_section_content("situaciones")
+
     def _handle_keyboard(self, e: ft.KeyboardEvent):
         if not self.main_layout:
             return
@@ -331,6 +338,22 @@ class MainApp:
     def mostrar_detalle_comision(self, comision_id):
         from main.handlers.forms import mostrar_detalle_comision
         mostrar_detalle_comision(self, comision_id)
+
+    def mostrar_form_situacion(self, personal_id=None, situacion_id=None):
+        from main.handlers.forms import mostrar_form_situacion
+        mostrar_form_situacion(self, personal_id, situacion_id)
+
+    def mostrar_form_edicion_situacion(self, situacion_id):
+        from main.handlers.forms import mostrar_form_situacion
+        mostrar_form_situacion(self, situacion_id=situacion_id)
+
+    def eliminar_situacion(self, situacion_id):
+        from main.handlers.actions import eliminar_situacion
+        eliminar_situacion(self, situacion_id)
+
+    def mostrar_detalle_situacion(self, situacion_id):
+        from main.handlers.forms import mostrar_detalle_situacion
+        mostrar_detalle_situacion(self, situacion_id)
 
 
     def crear_backup(self):

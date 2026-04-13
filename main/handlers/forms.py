@@ -46,6 +46,7 @@ def mostrar_detalle_comision(app, comision_id):
                 datos=comision,
                 on_back=app._go_to_comisiones,
                 on_edit=app.mostrar_form_edicion_comision,
+                on_finalizar=app.comisiones_ctrl.finalizar,
                 dark_mode=app.dark_mode,
             )
             app.content_area.content = detail
@@ -185,3 +186,48 @@ def mostrar_dialogo_cambiar_password(app):
         shape=ft.RoundedRectangleBorder(radius=16),
     )
     app.page.show_dialog(dlg)
+
+
+def mostrar_form_situacion(app, personal_id=None, situacion_id=None):
+    from situaciones_irregulares.views.form import SituacionFormView
+    
+    def builder():
+        form = SituacionFormView(
+            controller=app.situaciones_ctrl,
+            on_save=lambda sid=None: _on_situacion_saved(app, sid),
+            on_back=app._go_to_situaciones,
+            personal_id=personal_id,
+            situacion_id=situacion_id,
+            dark_mode=app.dark_mode,
+        )
+        app.content_area.content = form
+        app.page.update()
+    builder()
+
+
+def mostrar_detalle_situacion(app, situacion_id):
+    situacion = app.situaciones_ctrl.obtener_por_id(situacion_id)
+    if situacion:
+        from situaciones_irregulares.views.detail_view import SituacionDetailView
+        def builder():
+            detail = SituacionDetailView(
+                datos=situacion,
+                on_back=app._go_to_situaciones,
+                on_edit=app.mostrar_form_edicion_situacion,
+                on_resolver=app.situaciones_ctrl.resolver,
+                dark_mode=app.dark_mode,
+            )
+            app.content_area.content = detail
+            app.page.update()
+        builder()
+
+
+def _on_situacion_saved(app, situacion_id=None):
+    if hasattr(app, '_situaciones_dashboard'):
+        app._situaciones_dashboard.load_data()
+    app._go_to_situaciones()
+    app.page.update()
+
+
+def mostrar_form_edicion_situacion(app, situacion_id):
+    mostrar_form_situacion(app, situacion_id=situacion_id)

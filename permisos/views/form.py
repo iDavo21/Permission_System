@@ -117,7 +117,7 @@ class PermissionView(ft.Container):
             icon=ft.Icons.CALENDAR_TODAY,
             icon_color=tc["text_secondary"],
             on_click=self.abrir_calendario_desde,
-            tooltip="Seleccionar Fecha Inicio"
+            tooltip="Seleccionar Fecha Desde"
         )
         self.dp_desde = ft.DatePicker(
             first_date=datetime(2000, 1, 1),
@@ -137,7 +137,7 @@ class PermissionView(ft.Container):
             icon=ft.Icons.CALENDAR_TODAY,
             icon_color=tc["text_secondary"],
             on_click=self.abrir_calendario_hasta,
-            tooltip="Seleccionar Fecha Fin"
+            tooltip="Seleccionar Fecha Hasta"
         )
         self.dp_hasta = ft.DatePicker(
             first_date=datetime(2000, 1, 1),
@@ -441,8 +441,8 @@ class PermissionView(ft.Container):
 
         campos_obligatorios = {
             "Tipo de Permiso": self.tipo_permiso.value,
-            "Fecha Inicio": self.input_desde.value,
-            "Fecha Vencimiento": self.input_hasta.value,
+            "Fecha Desde": self.input_desde.value,
+            "Fecha Hasta": self.input_hasta.value,
         }
 
         vacios = [k for k, v in campos_obligatorios.items() if not v or not str(v).strip()]

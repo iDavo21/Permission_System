@@ -119,8 +119,8 @@ class DetailView(ft.Container):
 
                 seccion_titulo("Período del Permiso", ft.Icons.DATE_RANGE),
                 campo_ro("Fecha de Elaboración", datos.get("fecha_elaboracion"), ft.Icons.EDIT_DOCUMENT, width=W_FULL),
-                ft.Row([campo_ro("Inicio", fecha_desde_str, ft.Icons.EVENT_AVAILABLE, expand=True),
-                        campo_ro("Vencimiento", fecha_hasta_str, ft.Icons.EVENT_BUSY, expand=True)],
+                ft.Row([campo_ro("Desde", fecha_desde_str, ft.Icons.EVENT_AVAILABLE, expand=True),
+                        campo_ro("Hasta", fecha_hasta_str, ft.Icons.EVENT_BUSY, expand=True)],
                        spacing=15, width=W_FULL),
                 ft.Container(
                     content=lbl_dias,

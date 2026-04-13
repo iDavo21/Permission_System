@@ -13,19 +13,29 @@ class SummaryCards(ft.Row):
 
         permisos = permisos or []
         total_permisos = len(permisos)
+        vigentes = 0
         por_expirar = 0
         expirados = 0
 
         for p in permisos:
             estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
-            if estado_texto == "Por Expirar":
+            if estado_texto == "Vigente":
+                vigentes += 1
+            elif estado_texto == "Por Expirar":
                 por_expirar += 1
             elif estado_texto == "Expirado":
                 expirados += 1
 
+        self.panel_vigentes = self._crear_card(
+            icon=ft.Icons.CHECK_CIRCLE,
+            icon_color=ft.Colors.GREEN_400,
+            value=str(vigentes),
+            label="Permisos Vigentes",
+            anim_delay=400,
+        )
         self.panel_totales = self._crear_card(
             icon=ft.Icons.ASSIGNMENT_OUTLINED,
-            icon_color=ft.Colors.GREEN_400,
+            icon_color=ft.Colors.CYAN_400,
             value=str(total_permisos),
             label="Permisos Totales",
             anim_delay=500,
@@ -45,7 +55,7 @@ class SummaryCards(ft.Row):
             anim_delay=700,
         )
 
-        self.controls = [self.panel_totales, self.panel_por_expirar, self.panel_expirados]
+        self.controls = [self.panel_vigentes, self.panel_totales, self.panel_por_expirar, self.panel_expirados]
 
     def _crear_card(self, icon, icon_color, value, label, anim_delay):
         tc = theme_colors(self.dark_mode)
@@ -74,16 +84,20 @@ class SummaryCards(ft.Row):
 
     def actualizar(self, permisos):
         total_permisos = len(permisos)
+        vigentes = 0
         por_expirar = 0
         expirados = 0
 
         for p in permisos:
             estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
-            if estado_texto == "Por Expirar":
+            if estado_texto == "Vigente":
+                vigentes += 1
+            elif estado_texto == "Por Expirar":
                 por_expirar += 1
             elif estado_texto == "Expirado":
                 expirados += 1
 
+        self.panel_vigentes.content.controls[1].value = str(vigentes)
         self.panel_totales.content.controls[1].value = str(total_permisos)
         self.panel_por_expirar.content.controls[1].value = str(por_expirar)
         self.panel_expirados.content.controls[1].value = str(expirados)

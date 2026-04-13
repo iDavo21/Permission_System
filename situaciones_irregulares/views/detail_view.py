@@ -1,33 +1,31 @@
 import flet as ft
 import asyncio
 from datetime import datetime
-from core.estado_utils import obtener_estado
-from core.constants import FECHA_FORMAT
 from core.theme import theme_colors
 
 
-class ComisionDetailView(ft.Container):
-    def __init__(self, datos, on_back=None, on_edit=None, on_finalizar=None, dark_mode=True):
+class SituacionDetailView(ft.Container):
+    def __init__(self, datos, on_back=None, on_edit=None, on_resolver=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.alignment = ft.Alignment.CENTER
         self.on_back = on_back
         self.on_edit = on_edit
-        self.on_finalizar = on_finalizar
+        self.on_resolver = on_resolver
         self.datos = datos
-        self.comision_id = datos.get("id")
+        self.situacion_id = datos.get("id")
         self.dark_mode = dark_mode
         tc = theme_colors(self.dark_mode)
 
         W_FULL = 440
 
-        finalizada = datos.get("finalizada", 0)
-        if finalizada:
-            estado_texto = "FINALIZADA"
+        estado = datos.get("estado", "Activo")
+        if estado == "Resuelto":
+            estado_texto = "RESUELTO"
             estado_color = ft.Colors.GREEN_700
         else:
-            estado_texto = "ACTIVA"
-            estado_color = ft.Colors.ORANGE_700
+            estado_texto = "ACTIVO"
+            estado_color = ft.Colors.RED_700
 
         badge_estado = ft.Container(
             content=ft.Text(estado_texto, size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
@@ -38,7 +36,7 @@ class ComisionDetailView(ft.Container):
         def campo_ro(label, valor, icono=None, expand=False, width=None):
             kw = {
                 "label": label,
-                "value": valor or "\u2014",
+                "value": valor or "—",
                 "read_only": True,
                 "icon": icono,
                 "text_size": 13,
@@ -56,29 +54,30 @@ class ComisionDetailView(ft.Container):
 
         def seccion_titulo(texto, icono):
             return ft.Container(
-                content=ft.Row([ft.Icon(icono, color=ft.Colors.GREEN_400, size=18),
+                content=ft.Row([ft.Icon(icono, color=ft.Colors.ORANGE_400, size=18),
                                 ft.Text(texto, size=13, weight=ft.FontWeight.BOLD, color=tc["text_secondary"])],
                                spacing=8),
                 padding=ft.padding.only(top=12, bottom=2),
             )
 
-        fecha_salida_str = datos.get("fecha_salida", "")
+        fecha_inicio = datos.get("fecha_inicio", "")
+        fecha_resolucion = datos.get("fecha_resolucion", "")
 
         btn_editar = ft.ElevatedButton(
-            "Editar Comisión", icon=ft.Icons.EDIT_OUTLINED,
-            style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700,
-                                 shape=ft.RoundedRectangleBorder(radius=8), padding=15),
-            width=W_FULL,
-            on_click=lambda e: self.on_edit(self.comision_id) if self.on_edit else None,
-        )
-
-        btn_finalizar = ft.ElevatedButton(
-            "Finalizar Comisión", icon=ft.Icons.CHECK_CIRCLE,
+            "Editar Situación", icon=ft.Icons.EDIT_OUTLINED,
             style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.ORANGE_700,
                                  shape=ft.RoundedRectangleBorder(radius=8), padding=15),
             width=W_FULL,
-            on_click=self._confirmar_finalizar,
-            visible=not finalizada,
+            on_click=lambda e: self.on_edit(self.situacion_id) if self.on_edit else None,
+        )
+
+        btn_resolver = ft.ElevatedButton(
+            "Marcar como Resuelto", icon=ft.Icons.CHECK_CIRCLE,
+            style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700,
+                                 shape=ft.RoundedRectangleBorder(radius=8), padding=15),
+            width=W_FULL,
+            on_click=self._confirmar_resolver,
+            visible=estado != "Resuelto",
         )
 
         btn_volver = ft.TextButton("Volver", icon=ft.Icons.ARROW_BACK, icon_color=tc["text_secondary"],
@@ -86,8 +85,8 @@ class ComisionDetailView(ft.Container):
 
         formulario = ft.Column(
             controls=[
-                ft.Icon(ft.Icons.BUSINESS_CENTER_OUTLINED, size=48, color=ft.Colors.GREEN_400),
-                ft.Text("Detalle de la Comisión", size=24, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, size=48, color=ft.Colors.ORANGE_400),
+                ft.Text("Detalle de Situación", size=24, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
                 badge_estado,
                 ft.Divider(color=tc["divider"]),
                 seccion_titulo("Datos Personales", ft.Icons.PERSON),
@@ -98,15 +97,14 @@ class ComisionDetailView(ft.Container):
                 ft.Row([campo_ro("Grado", datos.get("grado_jerarquia"), ft.Icons.MILITARY_TECH, expand=True),
                         campo_ro("Cargo", datos.get("cargo"), ft.Icons.WORK_OUTLINED, expand=True)],
                        spacing=15, width=W_FULL),
-                seccion_titulo("Detalles de la Comisión", ft.Icons.BUSINESS_CENTER),
-                campo_ro("Tipo de Comisión", datos.get("tipo_comision"), ft.Icons.CATEGORY, width=W_FULL),
-                campo_ro("Destino", datos.get("destino"), ft.Icons.LOCATION_ON, width=W_FULL),
-                campo_ro("Fecha de Elaboración", datos.get("fecha_elaboracion"), ft.Icons.EDIT_DOCUMENT, width=W_FULL),
-                campo_ro("Fecha de Salida", fecha_salida_str, ft.Icons.FLIGHT_TAKEOFF, width=W_FULL),
+                seccion_titulo("Detalles de la Situación", ft.Icons.WARNING),
+                campo_ro("Tipo de Situación", datos.get("tipo_situacion"), ft.Icons.CATEGORY, width=W_FULL),
+                campo_ro("Fecha de Inicio", fecha_inicio, ft.Icons.EVENT, width=W_FULL),
+                campo_ro("Fecha de Resolución", fecha_resolucion if fecha_resolucion else "Pendiente", ft.Icons.CHECK_CIRCLE, width=W_FULL),
                 seccion_titulo("Observaciones", ft.Icons.NOTES),
                 campo_ro("Observaciones", datos.get("observaciones"), ft.Icons.NOTES, width=W_FULL),
                 ft.Divider(color=tc["divider"]),
-                btn_finalizar,
+                btn_resolver,
                 btn_editar,
                 btn_volver,
             ],
@@ -118,7 +116,7 @@ class ComisionDetailView(ft.Container):
             elevation=8, shape=ft.RoundedRectangleBorder(radius=15),
             content=ft.Container(
                 padding=ft.padding.only(top=30, bottom=30, left=35, right=35),
-                content=formulario, height=600,
+                content=formulario, height=650,
             ),
         )
 
@@ -137,8 +135,8 @@ class ComisionDetailView(ft.Container):
             self.update()
         asyncio.create_task(animate())
 
-    def _confirmar_finalizar(self, e):
-        if not self.on_finalizar:
+    def _confirmar_resolver(self, e):
+        if not self.on_resolver:
             return
         
         tc = theme_colors(self.dark_mode)
@@ -147,14 +145,16 @@ class ComisionDetailView(ft.Container):
         def cerrar(e):
             self.page.pop_dialog()
 
-        def finalizar(e):
+        def resolver(e):
             self.page.pop_dialog()
-            ok, err, msg = self.on_finalizar(self.comision_id)
+            from core.constants import FECHA_FORMAT
+            fecha_resolucion = datetime.now().strftime(FECHA_FORMAT)
+            ok, err, msg = self.on_resolver(self.situacion_id, fecha_resolucion)
             if ok:
                 self.page.snack_bar = ft.SnackBar(
                     ft.Row([
                         ft.Icon(ft.Icons.CHECK_CIRCLE, color=ft.Colors.WHITE, size=20),
-                        ft.Text(msg or "Comisión finalizada correctamente", color=ft.Colors.WHITE),
+                        ft.Text(msg or "Situación resuelta correctamente", color=ft.Colors.WHITE),
                     ], spacing=10),
                     bgcolor=ft.Colors.GREEN_700,
                     duration=3000,
@@ -176,11 +176,11 @@ class ComisionDetailView(ft.Container):
 
         dlg = ft.AlertDialog(
             modal=True,
-            title=ft.Text("Finalizar Comisión", color=tc["text_primary"]),
-            content=ft.Text(f"¿Confirmar que {nombre} ha finalizado su comisión y ha retornado?", color=tc["text_secondary"]),
+            title=ft.Text("Resolver Situación", color=tc["text_primary"]),
+            content=ft.Text(f"¿Confirmar que la situación de {nombre} ha sido resuelta?", color=tc["text_secondary"]),
             actions=[
                 ft.TextButton("Cancelar", on_click=cerrar),
-                ft.ElevatedButton("Confirmar", on_click=finalizar, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700, shape=ft.RoundedRectangleBorder(radius=8))),
+                ft.ElevatedButton("Confirmar", on_click=resolver, style=ft.ButtonStyle(color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_700, shape=ft.RoundedRectangleBorder(radius=8))),
             ],
             shape=ft.RoundedRectangleBorder(radius=16),
             bgcolor=tc["bg_dialog"],

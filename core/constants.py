@@ -27,6 +27,14 @@ TIPOS_COMISION = [
     "Permanente",
 ]
 
+TIPOS_SITUACION = [
+    "Privado de libertad",
+    "Presunto desertor",
+    "Suspendido",
+    "Baja temporal",
+    "En investigación",
+]
+
 EXPORT_TEMPLATES = {
     "resumen": {
         "nombre": "Resumen",
@@ -35,8 +43,8 @@ EXPORT_TEMPLATES = {
             ("apellidos", "Apellidos"),
             ("cedula", "Cedula"),
             ("tipo_permiso", "Tipo Permiso"),
-            ("fecha_desde", "Fecha Inicio"),
-            ("fecha_hasta", "Fecha Vencimiento"),
+            ("fecha_desde", "Fecha Desde"),
+            ("fecha_hasta", "Fecha Hasta"),
         ]
     },
     "comisiones": {
@@ -47,8 +55,8 @@ EXPORT_TEMPLATES = {
             ("cedula", "Cedula"),
             ("tipo_comision", "Tipo Comision"),
             ("destino", "Destino"),
-            ("fecha_desde", "Fecha Inicio"),
-            ("fecha_hasta", "Fecha Vencimiento"),
+            ("fecha_desde", "Fecha Desde"),
+            ("fecha_hasta", "Fecha Hasta"),
         ]
     },
 }

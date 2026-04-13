@@ -54,3 +54,12 @@ class ComisionesController(LoggerMixin):
         except Exception as e:
             self.log_error("Error al eliminar comisiones", error=e, personal_id=personal_id)
             return None, str(e), None
+
+    def finalizar(self, comision_id):
+        try:
+            ComisionModel.finalizar(comision_id)
+            self.log_info("Comisión finalizada", comision_id=comision_id)
+            return True, None, "✓ Comisión finalizada correctamente"
+        except Exception as e:
+            self.log_error("Error al finalizar comisión", error=e, comision_id=comision_id)
+            return None, str(e), None

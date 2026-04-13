@@ -150,6 +150,15 @@ class ComisionModel:
             conn.close()
 
     @staticmethod
+    def finalizar(comision_id: int):
+        conn = ComisionModel._connect()
+        try:
+            conn.execute("UPDATE comisiones SET finalizada = 1 WHERE id = ?", (comision_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
     def existe_duplicado(datos: dict, excluir_id=None) -> bool:
         conn = ComisionModel._connect()
         try:
@@ -157,14 +166,12 @@ class ComisionModel:
                 SELECT COUNT(*) FROM comisiones 
                 WHERE personal_id = :personal_id 
                   AND tipo_comision = :tipo_comision 
-                  AND fecha_desde = :fecha_desde 
-                  AND fecha_hasta = :fecha_hasta
+                  AND fecha_salida = :fecha_salida
             """
             parametros = {
                 "personal_id": datos.get("personal_id"),
                 "tipo_comision": datos.get("tipo_comision"),
-                "fecha_desde": datos.get("fecha_desde"),
-                "fecha_hasta": datos.get("fecha_hasta")
+                "fecha_salida": datos.get("fecha_salida"),
             }
             if excluir_id:
                 query += " AND id != :excluir_id"

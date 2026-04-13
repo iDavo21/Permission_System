@@ -87,7 +87,25 @@ class PersonalDashboard(ft.Container):
             border=ft.border.all(1, tc["table_border"]),
         )
 
-        self.lbl_count = ft.Text("Total: 0", size=13, color=tc["text_secondary"])
+        self.tabla_container = ft.Container(
+            content=self.data_table,
+            border_radius=14,
+            border=ft.border.all(1, tc["table_border"]),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            bgcolor=tc["bg_card"],
+        )
+
+        self.lbl_count = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.TABLE_CHART, size=18, color=tc["text_secondary"]),
+                ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                ft.Text("registrados", size=12, color=tc["text_secondary"]),
+            ], spacing=6),
+            bgcolor=tc["bg_card"],
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            border=ft.border.all(1, tc["border_primary"]),
+        )
 
         self.stat_total = self._stat_card(ft.Icons.PEOPLE, "0", "Personal Registrado", ft.Colors.GREEN_400)
         self.stat_activos = self._stat_card(ft.Icons.BADGE, "0", "Con Cargo Asignado", ft.Colors.CYAN_400)
@@ -104,7 +122,7 @@ class PersonalDashboard(ft.Container):
                     margin=ft.margin.only(left=24, right=24, top=8),
                 ),
                 ft.Container(
-                    content=self.data_table,
+                    content=self.tabla_container,
                     expand=True,
                     border_radius=14,
                     clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
@@ -396,7 +414,7 @@ class PersonalDashboard(ft.Container):
         tc = theme_colors(self.dark_mode)
         self.data_table.rows.clear()
         total = len(self.registros_filtrados)
-        self.lbl_count.value = "Total: %d" % total
+        self.lbl_count.content.controls[1].value = str(total)
 
         total_paginas = max(1, (total + self.registros_por_pagina - 1) // self.registros_por_pagina)
         self.pagina_actual = max(1, min(self.pagina_actual, total_paginas))

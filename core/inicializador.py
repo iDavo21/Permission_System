@@ -2,12 +2,14 @@ from personal.models.personal_model import PersonalModel
 from permisos.models.permiso_model import PermisoModel
 from comisiones.models.comision_model import ComisionModel
 from auth.models.user_model import UserModel
+from situaciones_irregulares.models.situacion_model import SituacionIrregularModel
 
 
 def inicializar_sistema():
     PersonalModel.create_table()
     PermisoModel.create_table()
     ComisionModel.create_table()
+    SituacionIrregularModel.create_table()
     UserModel.create_table()
     UserModel.crear_admin_default()
 
@@ -15,7 +17,7 @@ def inicializar_sistema():
 def verificar_tablas():
     from core.database import get_connection
     
-    dbs = ["personal.db", "permisos.db", "comisiones.db", "usuarios.db"]
+    dbs = ["personal.db", "permisos.db", "comisiones.db", "situaciones_irregulares.db", "usuarios.db"]
     for db in dbs:
         conn = get_connection(db)
         cursor = conn.execute(

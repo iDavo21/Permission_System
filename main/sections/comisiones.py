@@ -11,6 +11,7 @@ def build(app: 'MainApp'):
         on_edit=app.mostrar_form_edicion_comision,
         on_delete=app.eliminar_comision,
         on_view_detail=app.mostrar_detalle_comision,
+        on_finalizar=app.comisiones_ctrl.finalizar,
         dark_mode=app.dark_mode,
     )
     app._comisiones_dashboard = dashboard

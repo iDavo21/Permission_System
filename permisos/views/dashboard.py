@@ -4,7 +4,7 @@ from datetime import datetime
 from core.estado_utils import obtener_estado, fecha_a_datetime, obtener_estado_urgencia, contar_expiracion_proxima
 from core.constants import FECHA_FORMAT, TIPOS_PERMISO, DIAS_EXPIRACION_PRONTO
 from core.theme import theme_colors
-from permisos.views.components import SummaryCards, PermisosTable, PaginationBar
+from permisos.views.components import PermisosTable, PaginationBar
 from core.components.loading import LoadingIndicator
 
 
@@ -32,7 +32,9 @@ class AdminView(ft.Container):
 
         tipos = sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO)
 
-        self._summary = SummaryCards(permisos=self.todos_los_permisos, dark_mode=self.dark_mode)
+        self.stat_vigentes = self._stat_card(ft.Icons.CHECK_CIRCLE, "0", "Permisos Vigentes", ft.Colors.GREEN_400)
+        self.stat_por_expirar = self._stat_card(ft.Icons.WARNING_AMBER_ROUNDED, "0", "Por Expirar", ft.Colors.AMBER_400)
+        self.stat_expirados = self._stat_card(ft.Icons.CANCEL_OUTLINED, "0", "Expirados", ft.Colors.RED_400)
 
         self._table = PermisosTable(
             permisos=self.permisos_filtrados,
@@ -46,6 +48,11 @@ class AdminView(ft.Container):
             on_change_page=self.cambiar_pagina,
             on_change_ppp=self.cambiar_registros_pagina,
             dark_mode=self.dark_mode,
+        )
+
+        self.panel_stats = ft.Container(
+            content=ft.Row([self.stat_vigentes, self.stat_por_expirar, self.stat_expirados], spacing=16),
+            margin=ft.margin.only(left=24, right=24),
         )
         
         self.loading_indicator = LoadingIndicator("Cargando permisos...", dark_mode=self.dark_mode)
@@ -104,7 +111,17 @@ class AdminView(ft.Container):
             on_click=lambda e: self.on_add_permission() if self.on_add_permission else None,
         )
 
-        self.lbl_count = ft.Text("Total: 0", size=13, color=tc["text_secondary"])
+        self.lbl_count = ft.Container(
+            content=ft.Row([
+                ft.Icon(ft.Icons.TABLE_CHART, size=18, color=tc["text_secondary"]),
+                ft.Text("0", size=14, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                ft.Text("registrados", size=12, color=tc["text_secondary"]),
+            ], spacing=6),
+            bgcolor=tc["bg_card"],
+            border_radius=8,
+            padding=ft.padding.symmetric(horizontal=12, vertical=8),
+            border=ft.border.all(1, tc["border_primary"]),
+        )
         self.lbl_status = ft.Text("", size=13, color=ft.Colors.RED_400)
 
         self.tabla_container = ft.Container(
@@ -207,10 +224,7 @@ class AdminView(ft.Container):
                             margin=ft.margin.only(left=24, right=24, top=16),
                         ),
                         ft.Container(height=12),
-                        ft.Container(
-                            content=self._summary,
-                            margin=ft.margin.only(left=24, right=24),
-                        ),
+                        self.panel_stats,
                         ft.Container(height=12),
                         ft.Stack([
                             self.content_area,
@@ -397,8 +411,8 @@ class AdminView(ft.Container):
 
         total = len(self.todos_los_permisos)
 
-        self.lbl_count.value = "Total: %d" % total
-        self._summary.actualizar(self.permisos_filtrados)
+        self.lbl_count.content.controls[1].value = str(total)
+        self._actualizar_stats()
 
         self.tabla_container.visible = total_registros > 0
         self.content_area.visible = total_registros > 0
@@ -437,7 +451,7 @@ class AdminView(ft.Container):
     def load_data(self):
         self.todos_los_permisos = self.todos_los_permisos
         self.permisos_filtrados = list(self.todos_los_permisos)
-        self._summary.actualizar(self.todos_los_permisos)
+        self._actualizar_stats()
         self.actualizar_tabla(self.todos_los_permisos)
 
     def did_mount(self):
@@ -447,3 +461,44 @@ class AdminView(ft.Container):
             self.opacity = 1
             self.update()
         asyncio.create_task(animate())
+
+    def _actualizar_stats(self):
+        from core.estado_utils import obtener_estado
+        vigentes = 0
+        por_expirar = 0
+        expirados = 0
+        
+        for p in self.todos_los_permisos:
+            estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
+            if estado_texto == "Vigente":
+                vigentes += 1
+            elif estado_texto == "Por Expirar":
+                por_expirar += 1
+            elif estado_texto == "Expirado":
+                expirados += 1
+        
+        self.stat_vigentes.content.controls[1].value = str(vigentes)
+        self.stat_por_expirar.content.controls[1].value = str(por_expirar)
+        self.stat_expirados.content.controls[1].value = str(expirados)
+        try:
+            self.panel_stats.update()
+        except RuntimeError:
+            pass
+
+    def _stat_card(self, icon, value, label, accent):
+        tc = theme_colors(self.dark_mode)
+        return ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Icon(icon, size=20, color=accent),
+                    ft.Container(expand=True),
+                ]),
+                ft.Text(value, size=26, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                ft.Text(label, size=11, color=tc["text_secondary"]),
+            ], spacing=4),
+            bgcolor=tc["stat_bg"],
+            border_radius=14,
+            padding=ft.padding.symmetric(vertical=20, horizontal=22),
+            expand=True,
+            border=ft.border.all(1, tc["stat_border"]),
+        )

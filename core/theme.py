@@ -35,6 +35,7 @@ def theme_colors(dark=True):
             "badge_amber": ft.Colors.with_opacity(0.1, ft.Colors.AMBER),
             "badge_red": ft.Colors.with_opacity(0.1, ft.Colors.RED),
             "badge_cyan": ft.Colors.with_opacity(0.1, ft.Colors.CYAN),
+            "badge_orange": ft.Colors.with_opacity(0.1, ft.Colors.ORANGE),
             "icon_bg": ft.Colors.with_opacity(0.1, ft.Colors.GREEN_400),
             "empty_icon_bg": ft.Colors.with_opacity(0.06, ft.Colors.GREEN),
             "empty_text": ft.Colors.GREY_300,

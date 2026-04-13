@@ -20,6 +20,7 @@ class Sidebar(ft.Container):
         self._build_item_button("personal", ft.Icons.PEOPLE, "Personal", tc)
         self._build_item_button("permisos", ft.Icons.EVENT_NOTE, "Permisos", tc)
         self._build_item_button("comisiones", ft.Icons.BUSINESS_CENTER, "Comisiones", tc)
+        self._build_item_button("situaciones", ft.Icons.WARNING_AMBER_ROUNDED, "Situaciones", tc)
 
         self.theme_toggle = ft.Container(
             content=ft.Row([
@@ -87,6 +88,7 @@ class Sidebar(ft.Container):
                         self._item_buttons["personal"],
                         self._item_buttons["permisos"],
                         self._item_buttons["comisiones"],
+                        self._item_buttons["situaciones"],
                     ], spacing=4),
                     padding=ft.padding.symmetric(horizontal=12),
                 ),
