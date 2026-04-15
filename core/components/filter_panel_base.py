@@ -222,9 +222,15 @@ class FilterPanelBase(ft.Container):
         return row
     
     def _on_date_picked(self, e, key):
-        if e.value and key in self._date_fields:
-            self._date_fields[key]["field"].value = e.value.strftime("%d/%m/%Y")
+        picker = e.control
+        selected_date = picker.value
+        if selected_date and key in self._date_fields:
+            date_str = selected_date.strftime("%d/%m/%Y")
+            self._date_fields[key]["field"].value = date_str
             self._date_fields[key]["field"].update()
+            filtros = self.get_filtros()
+            if self.on_apply_callback:
+                self.on_apply_callback(filtros)
     
     def _rebuild_dropdowns_content(self):
         self.content.controls[3] = self._build_dropdowns_section()

@@ -263,8 +263,8 @@ class AdminView(ft.Container):
         opciones_estado = ["Todos", "Vigente", "Por Expirar", "Expirado"]
         self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
         
-        self._filter_panel.add_date_field("fecha_desde", "Desde", page=None)
-        self._filter_panel.add_date_field("fecha_hasta", "Hasta", page=None)
+        # self._filter_panel.add_date_field("fecha_desde", "Desde", page=None)
+        # self._filter_panel.add_date_field("fecha_hasta", "Hasta", page=None)
         
         self._filter_container = FilterPanelContainer(
             filter_panel=self._filter_panel,
@@ -274,8 +274,6 @@ class AdminView(ft.Container):
     def _on_filter_apply(self, filtros):
         tipo = filtros.get("tipo", "Todos")
         estado = filtros.get("estado", "Todos")
-        fecha_desde = filtros.get("fecha_desde", "").strip()
-        fecha_hasta = filtros.get("fecha_hasta", "").strip()
 
         resultado = []
         for p in self.todos_los_permisos:
@@ -287,14 +285,6 @@ class AdminView(ft.Container):
                 estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
                 if estado_texto != estado:
                     continue
-            
-            if fecha_desde or fecha_hasta:
-                fecha_permiso = p.get("fecha_desde", "")
-                if fecha_permiso:
-                    if fecha_desde and fecha_permiso < fecha_desde:
-                        continue
-                    if fecha_hasta and fecha_permiso > fecha_hasta:
-                        continue
 
             resultado.append(p)
 
@@ -326,12 +316,9 @@ class AdminView(ft.Container):
         else:
             self._filter_container.hide()
 
-    def _on_search(self, e):
+def _on_search(self, e):
         filtros = self._filter_panel.get_filtros() if self._filter_panel else {}
         filtros["texto"] = self.search_field.value or ""
-        
-        fecha_desde = filtros.get("fecha_desde", "").strip()
-        fecha_hasta = filtros.get("fecha_hasta", "").strip()
         
         texto = self.search_field.value.strip().lower()
         tipo = filtros.get("tipo", "Todos")
@@ -341,12 +328,12 @@ class AdminView(ft.Container):
         for p in self.todos_los_permisos:
             if texto:
                 nombres = p.get("nombres", "")
-                apellidos = p.get("apellidos", "")
+                appellidos = p.get("apellidos", "")
                 if isinstance(nombres, tuple):
                     nombres = " ".join(str(n) for n in nombres) if nombres else ""
                 if isinstance(apellidos, tuple):
-                    apellidos = " ".join(str(a) for a in apellidos) if apellidos else ""
-                nombre_completo = ("%s %s" % (nombres, apellidos)).lower()
+                    appellidos = " ".join(str(a) for a in appellidos) if appellidos else ""
+                nombre_completo = ("%s %s" % (nombres, appellidos)).lower()
                 cedula = str(p.get("cedula", "")).lower()
                 if texto not in nombre_completo and texto not in cedula:
                     continue
@@ -359,14 +346,6 @@ class AdminView(ft.Container):
                 estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
                 if estado_texto != estado:
                     continue
-            
-            if fecha_desde or fecha_hasta:
-                fecha_permiso = p.get("fecha_desde", "")
-                if fecha_permiso:
-                    if fecha_desde and fecha_permiso < fecha_desde:
-                        continue
-                    if fecha_hasta and fecha_permiso > fecha_hasta:
-                        continue
             
             resultado.append(p)
         
