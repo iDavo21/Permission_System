@@ -10,7 +10,7 @@ from core.estado_utils import fecha_a_datetime
 from core.theme import theme_colors
 
 class PermissionView(ft.Container):
-    def __init__(self, on_back, on_save=None, personal_id=None, permiso_id=None, dark_mode=True):
+    def __init__(self, on_back, on_save=None, personal_id=None, permiso_id=None, lista_permisos=None, lista_comisiones=None, lista_situaciones=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.alignment = ft.Alignment.CENTER
@@ -19,6 +19,9 @@ class PermissionView(ft.Container):
         self.personal_id_inicial = personal_id
         self.permiso_id = permiso_id
         self.dark_mode = dark_mode
+        self.lista_permisos = lista_permisos or []
+        self.lista_comisiones = lista_comisiones or []
+        self.lista_situaciones = lista_situaciones or []
         
         self.personal_seleccionados = []
         
@@ -97,7 +100,7 @@ class PermissionView(ft.Container):
             label="Fecha de Elaboración",
             icon=ft.Icons.EDIT_DOCUMENT,
             width=W_FULL,
-            value=hoy.strftime("%d/%m/%Y"),
+            value=hoy.strftime(FECHA_FORMAT),
             read_only=True,
             bgcolor=tc["input_bg"],
             border_color=tc["input_border"],
@@ -332,10 +335,12 @@ class PermissionView(ft.Container):
 
         def confirmar_seleccion(e):
             ids_existentes = {p["id"] for p in self.personal_seleccionados}
+            nuevos_seleccionados = []
             for row in list_view.controls:
                 chk = row.content
                 if chk.value and row.data["id"] not in ids_existentes:
-                    self.personal_seleccionados.append(row.data)
+                    nuevos_seleccionados.append(row.data)
+            self.personal_seleccionados.extend(nuevos_seleccionados)
             self.actualizar_etiquetas_personal()
             self.page.pop_dialog()
 
@@ -377,7 +382,10 @@ class PermissionView(ft.Container):
             await asyncio.sleep(0.05)
             self._card_wrapper.opacity = 1
             self._card_wrapper.offset = ft.Offset(0, 0)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())
 
     def volver_al_panel(self, e):
@@ -475,6 +483,57 @@ class PermissionView(ft.Container):
                 self.page.update()
                 return
 
+        datos_base = {
+            "tipo_permiso": self.tipo_permiso.value,
+            "fecha_elaboracion": self.txt_fecha_elaboracion.value,
+            "fecha_desde": self.input_desde.value,
+            "fecha_hasta": self.input_hasta.value,
+            "observaciones": self.observaciones.value,
+        }
+
+        from core.validators import verificar_estado_personal
+        
+        personas_con_conflicto = []
+        for p in self.personal_seleccionados:
+            conflicto = verificar_estado_personal(
+                p.get("id"), 
+                "permisos",
+                self.lista_permisos, 
+                self.lista_comisiones, 
+                self.lista_situaciones
+            )
+            if conflicto:
+                nombres = "%s %s" % (p.get("nombres", ""), p.get("apellidos", ""))
+                personas_con_conflicto.append({"nombre": nombres, "conflicto": conflicto})
+        
+        if personas_con_conflicto:
+            mensaje = "El personal seleccionado ya está activo en otro módulo:\n"
+            for item in personas_con_conflicto:
+                mensaje += f"• {item['nombre']}: {item['conflicto']}\n"
+            mensaje += "\n¿Desea guardar de todas formas?"
+            
+            def on_confirmar(e):
+                self.page.pop_dialog()
+                self._guardar_permisos(datos_base)
+            
+            def on_cancelar(e):
+                self.page.pop_dialog()
+            
+            dlg = ft.AlertDialog(
+                title=ft.Text("⚠️ Advertencia"),
+                content=ft.Text(mensaje),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=on_cancelar),
+                    ft.ElevatedButton("Guardar de todas formas", on_click=on_confirmar),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            self.page.show_dialog(dlg)
+            return
+
+        self._guardar_permisos(datos_base)
+
+    def _guardar_permisos(self, datos_base):
         datos_base = {
             "tipo_permiso":       self.tipo_permiso.value,
             "fecha_elaboracion":  self.txt_fecha_elaboracion.value,

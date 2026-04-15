@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime
 from core.estado_utils import obtener_estado, calcular_dias_permiso
 from core.theme import theme_colors
+from core.constants import FECHA_FORMAT
 
 
 class DetailView(ft.Container):
@@ -64,8 +65,8 @@ class DetailView(ft.Container):
 
         lbl_dias = ft.Text("", weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_400, size=14)
         try:
-            fd = datetime.strptime(fecha_desde_str, "%d/%m/%Y")
-            fh = datetime.strptime(fecha_hasta_str, "%d/%m/%Y")
+            fd = datetime.strptime(fecha_desde_str, FECHA_FORMAT)
+            fh = datetime.strptime(fecha_hasta_str, FECHA_FORMAT)
             diff = (fh - fd).days
             if diff >= 0:
                 lbl_dias.value = "Duración: %d día(s)" % (diff + 1)
@@ -176,5 +177,8 @@ class DetailView(ft.Container):
             await asyncio.sleep(0.05)
             self._card_wrapper.opacity = 1
             self._card_wrapper.offset = ft.Offset(0, 0)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())

@@ -1,4 +1,5 @@
 from core.database import get_connection, get_db_path
+from core.validators import validar_permiso
 
 DB_NAME = "permisos.db"
 PERSONAL_DB = "personal.db"
@@ -39,6 +40,10 @@ class PermisoModel:
 
     @staticmethod
     def save(datos: dict) -> int:
+        ok, msg, errores = validar_permiso(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         conn = PermisoModel._connect()
         try:
             cursor = conn.execute("""
@@ -112,6 +117,10 @@ class PermisoModel:
 
     @staticmethod
     def update(permiso_id: int, datos: dict):
+        ok, msg, errores = validar_permiso(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         datos['id'] = permiso_id
         conn = PermisoModel._connect()
         try:
@@ -144,6 +153,24 @@ class PermisoModel:
         try:
             conn.execute("DELETE FROM permisos WHERE personal_id = ?", (personal_id,))
             conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def tiene_permiso_activo(personal_id: int) -> bool:
+        """Verifica si una persona tiene un permiso activo (vigente o por expirar)."""
+        from core.estado_utils import obtener_estado
+        conn = PermisoModel._connect()
+        try:
+            rows = conn.execute(
+                "SELECT fecha_hasta FROM permisos WHERE personal_id = ?",
+                (personal_id,)
+            ).fetchall()
+            for row in rows:
+                estado, _ = obtener_estado(row[0])
+                if estado in ("Vigente", "Por Expirar"):
+                    return True
+            return False
         finally:
             conn.close()
 

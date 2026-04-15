@@ -4,6 +4,9 @@ from datetime import datetime
 from core.constants import FECHA_FORMAT, TIPOS_SITUACION
 from core.theme import theme_colors
 from core.components.loading import LoadingIndicator
+from core.components.pagination import PaginationControl
+from core.components.filter_panel_base import FilterPanelBase, FilterPanelContainer
+from core.components.stats_panel import StatsPanel
 
 
 class SituacionesDashboard(ft.Container):
@@ -70,15 +73,21 @@ class SituacionesDashboard(ft.Container):
             border=ft.border.all(1, tc["border_primary"]),
         )
 
-        self.stat_activas = self._stat_card(ft.Icons.WARNING, "0", "Situaciones Activas", ft.Colors.RED_400)
-        self.stat_resueltas = self._stat_card(ft.Icons.CHECK_CIRCLE, "0", "Resueltas", ft.Colors.GREEN_400)
-        self.stat_privados = self._stat_card(ft.Icons.GAVEL, "0", "Privados de Libertad", ft.Colors.ORANGE_400)
-        self.stat_desertores = self._stat_card(ft.Icons.RUN_CIRCLE, "0", "Presuntos Desertores", ft.Colors.AMBER_400)
-
-        self.panel_stats = ft.Container(
-            content=ft.Row([self.stat_activas, self.stat_resueltas, self.stat_privados, self.stat_desertores], spacing=16),
-            margin=ft.margin.only(left=16, right=24),
+        self.stats_config = [
+            {"key": "activas", "icon": ft.Icons.WARNING, "value": "0", "label": "Situaciones Activas", "accent": ft.Colors.RED_400},
+            {"key": "resueltas", "icon": ft.Icons.CHECK_CIRCLE, "value": "0", "label": "Resueltas", "accent": ft.Colors.GREEN_400},
+            {"key": "privados", "icon": ft.Icons.GAVEL, "value": "0", "label": "Privados de Libertad", "accent": ft.Colors.ORANGE_400},
+            {"key": "desertores", "icon": ft.Icons.RUN_CIRCLE, "value": "0", "label": "Presuntos Desertores", "accent": ft.Colors.AMBER_400},
+        ]
+        
+        self.stats_panel = StatsPanel(
+            cards_config=self.stats_config,
+            dark_mode=self.dark_mode,
+            spacing=16,
+            margin=ft.margin.only(left=16, right=24)
         )
+        
+        self.panel_stats = self.stats_panel
 
         self.mensaje_vacio = ft.Column(
             controls=[
@@ -132,7 +141,7 @@ class SituacionesDashboard(ft.Container):
         self.btn_add = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.ADD, size=18, color=ft.Colors.WHITE),
-                ft.Text("Nueva Situación", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
+                ft.Text("Nueva", size=12, color=ft.Colors.WHITE, weight=ft.FontWeight.W_500),
             ], spacing=6),
             bgcolor=ft.Colors.GREEN_700,
             border_radius=10,
@@ -149,16 +158,18 @@ class SituacionesDashboard(ft.Container):
             on_click=self._toggle_filtros,
         )
 
-        pagination_row = self._build_pagination(tc)
-
-        self.pagination_row = pagination_row
+        self._pagination = PaginationControl(
+            on_change_page=self._cambiar_pagina,
+            on_change_ppp=self._cambiar_registros_pagina,
+            dark_mode=self.dark_mode,
+        )
 
         self.content_area = ft.Column(
             controls=[
                 self.panel_stats,
                 ft.Row([self.lbl_count, ft.Container(expand=True)], margin=ft.margin.only(left=16, right=24)),
                 ft.Container(content=self.tabla_container, margin=ft.margin.only(left=16, right=24, bottom=12)),
-                self.pagination_row,
+                self._pagination,
             ],
             expand=True,
         )
@@ -167,70 +178,65 @@ class SituacionesDashboard(ft.Container):
 
         self._build_filter_panel(tc)
 
-        self.content = ft.Column(
+        self.content = ft.Stack(
             controls=[
-                ft.Container(
-                    content=ft.Row([
-                        ft.Row([
-                            ft.Container(
-                                content=ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ORANGE_400, size=26),
-                                bgcolor=tc["icon_bg"],
-                                border_radius=10,
-                                padding=10,
-                            ),
-                            ft.Column([
-                                ft.Text("Situaciones Irregulares", size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                                ft.Text("Control de situaciones especiales", size=12, color=tc["text_secondary"]),
-                            ], spacing=2),
-                        ], spacing=14),
-                        ft.Container(expand=True),
-                        self.search_field,
-                        ft.Container(width=8),
-                        self.btn_filter,
-                        ft.Container(width=8),
-                        self.btn_add,
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=ft.padding.symmetric(horizontal=24, vertical=16),
-                    bgcolor=tc["header_bg"],
-                    border=ft.border.all(1, tc["header_border"]),
-                    border_radius=14,
-                    margin=ft.margin.only(left=16, right=24, top=16),
+                ft.Column(
+                    controls=[
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Row([
+                                    ft.Container(
+                                        content=ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=ft.Colors.ORANGE_400, size=26),
+                                        bgcolor=tc["icon_bg"],
+                                        border_radius=10,
+                                        padding=10,
+                                    ),
+                                    ft.Column([
+                                        ft.Text("Situaciones Irregulares", size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                                        ft.Text("Control de situaciones especiales", size=12, color=tc["text_secondary"]),
+                                    ], spacing=2),
+                                ], spacing=14),
+                                ft.Container(expand=True),
+                                self.search_field,
+                                ft.Container(width=8),
+                                self.btn_filter,
+                                ft.Container(width=8),
+                                self.btn_add,
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            padding=ft.padding.symmetric(horizontal=24, vertical=16),
+                            bgcolor=tc["header_bg"],
+                            border=ft.border.all(1, tc["header_border"]),
+                            border_radius=14,
+                            margin=ft.margin.only(left=16, right=24, top=16),
+                        ),
+                        ft.Container(height=12),
+                        ft.Stack([
+                            self.content_area,
+                            self.mensaje_vacio,
+                        ], expand=True),
+                    ],
+                    expand=True,
                 ),
-                ft.Container(height=12),
-                ft.Stack([
-                    self.content_area,
-                    self.mensaje_vacio,
-                ], expand=True),
+                self._filter_container,
             ],
             expand=True,
         )
 
-    def _build_pagination(self, tc):
-        self.lbl_prev = ft.IconButton(
-            icon=ft.Icons.CHEVRON_LEFT,
-            icon_color=tc["text_secondary"],
-            icon_size=20,
-            on_click=lambda e: self._cambiar_pagina(-1),
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-        )
-        self.lbl_next = ft.IconButton(
-            icon=ft.Icons.CHEVRON_RIGHT,
-            icon_color=tc["text_secondary"],
-            icon_size=20,
-            on_click=lambda e: self._cambiar_pagina(1),
-            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-        )
-        self.lbl_page_info = ft.Text("Página 1 de 1", size=13, color=tc["text_secondary"])
+    def _cambiar_registros_pagina(self):
+        self.registros_por_pagina = self._pagination.get_ppp()
+        self.pagina_actual = 1
+        self._render_tabla()
 
-        return ft.Container(
-            content=ft.Row([self.lbl_prev, self.lbl_page_info, self.lbl_next], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER, spacing=6),
-            bgcolor=tc["bg_card"],
-            border_radius=10,
-            padding=ft.padding.symmetric(horizontal=16, vertical=8),
-            border=ft.border.all(1, tc["border_primary"]),
-            margin=ft.margin.only(left=16, right=24, bottom=16),
-            visible=False,
-        )
+    def _actualizar_pagination_controls(self):
+        total = len(self.registros_filtrados)
+        total_paginas = max(1, (total + self.registros_por_pagina - 1) // self.registros_por_pagina)
+        self._pagination.actualizar(self.pagina_actual, total_paginas, total)
+        self.tabla_container.visible = total > 0
+        self.mensaje_vacio.visible = total == 0
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def _cambiar_pagina(self, delta):
         nuevo = self.pagina_actual + delta
@@ -258,82 +264,29 @@ class SituacionesDashboard(ft.Container):
     def _build_filter_panel(self, tc):
         self._tipos_situacion = self._get_unique_values("tipo_situacion")
 
-        self.filtro_tipo = ft.Dropdown(
-            label="Tipo de Situación",
-            width=200,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(t) for t in self._tipos_situacion],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
+        self._filter_panel = FilterPanelBase(
+            on_apply=self._on_filter_apply,
+            on_close=self._toggle_filtros,
+            dark_mode=self.dark_mode,
+            show_search=False
+        )
+        
+        self._filter_panel.add_dropdown("tipo", "Tipo de Situación", self._tipos_situacion)
+        
+        opciones_estado = ["Todos", "Activo", "Resuelto"]
+        self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
+        
+        self._filter_container = FilterPanelContainer(
+            filter_panel=self._filter_panel,
+            dark_mode=self.dark_mode
         )
 
-        self.filtro_estado = ft.Dropdown(
-            label="Estado",
-            width=150,
-            options=[
-                ft.dropdown.Option("Todos"),
-                ft.dropdown.Option("Activo"),
-                ft.dropdown.Option("Resuelto"),
-            ],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
-        )
-
-        self.btn_aplicar_filtros = ft.Container(
-            content=ft.Text("Aplicar", color=ft.Colors.WHITE, size=13, weight=ft.FontWeight.BOLD),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._aplicar_filtros(),
-        )
-
-        self.btn_limpiar_filtros = ft.Container(
-            content=ft.Text("Limpiar", color=tc["text_secondary"], size=13),
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=16, vertical=8),
-            ink=True,
-            on_click=lambda e: self._limpiar_filtros(),
-        )
-
-        self._filter_panel = ft.Column([
-            ft.Row([self.filtro_tipo, self.filtro_estado, self.btn_aplicar_filtros, self.btn_limpiar_filtros], spacing=12),
-        ], spacing=10, alignment=ft.MainAxisAlignment.START)
-
-        self._filter_panel_container = ft.Container(
-            content=self._filter_panel,
-            margin=ft.margin.only(left=24, right=24, bottom=12),
-            padding=ft.padding.all(16),
-            bgcolor=tc["bg_card"],
-            border_radius=12,
-            border=ft.border.all(1, tc["border_primary"]),
-            visible=False,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
-
-    def _aplicar_filtros(self):
-        texto = (self.search_field.value or "").strip().lower()
-        tipo = self.filtro_tipo.value
-        estado = self.filtro_estado.value
+    def _on_filter_apply(self, filtros):
+        tipo = filtros.get("tipo", "Todos")
+        estado = filtros.get("estado", "Todos")
 
         resultado = []
         for s in self.todos_los_registros:
-            if texto:
-                nombre = "%s %s" % (s.get("nombres", ""), s.get("apellidos", "")).lower()
-                cedula = s.get("cedula", "").lower()
-                if texto not in nombre and texto not in cedula:
-                    continue
-
             if tipo and tipo != "Todos":
                 if s.get("tipo_situacion", "") != tipo:
                     continue
@@ -350,17 +303,44 @@ class SituacionesDashboard(ft.Container):
         self._render_tabla()
         self._toggle_filtros(None)
 
+    def _on_filter_apply(self, filtros):
+        tipo = filtros.get("tipo", "Todos")
+        estado = filtros.get("estado", "Todos")
+
+        resultado = []
+        for s in self.todos_los_registros:
+            if tipo and tipo != "Todos":
+                if s.get("tipo_situacion", "") != tipo:
+                    continue
+
+            if estado and estado != "Todos":
+                estado_texto = s.get("estado", "Activo")
+                if estado_texto != estado:
+                    continue
+
+            resultado.append(s)
+
+        self.registros_filtrados = resultado
+        self.pagina_actual = 1
+        self._render_tabla()
+
     def _limpiar_filtros(self):
-        self.search_field.value = ""
-        self.filtro_tipo.value = "Todos"
-        self.filtro_estado.value = "Todos"
+        self._filter_panel._limpiar()
         self.registros_filtrados = list(self.todos_los_registros)
         self.pagina_actual = 1
         self._render_tabla()
-        self._toggle_filtros(None)
+
+    def _toggle_filtros(self, e=None):
+        self.filtros_abiertos = not self.filtros_abiertos
+        if self.filtros_abiertos:
+            self._filter_container.show()
+        else:
+            self._filter_container.hide()
 
     def _on_search(self, e):
-        self._aplicar_filtros()
+        filtros = self._filter_panel.get_filtros() if self._filter_panel else {}
+        filtros["texto"] = self.search_field.value or ""
+        self._on_filter_apply(filtros)
 
     def _render_tabla(self):
         tc = theme_colors(self.dark_mode)
@@ -428,16 +408,7 @@ class SituacionesDashboard(ft.Container):
                 ),
             )
 
-        self.lbl_page_info.value = "Pagina %d de %d" % (self.pagina_actual, total_paginas)
-        self.lbl_prev.disabled = self.pagina_actual <= 1
-        self.lbl_next.disabled = self.pagina_actual >= total_paginas
-        self.tabla_container.visible = total > 0
-        self.mensaje_vacio.visible = total == 0
-        self.pagination_row.visible = total > 0
-        try:
-            self.update()
-        except RuntimeError:
-            pass
+        self._actualizar_pagination_controls()
 
     def _confirm_delete(self, situacion_id):
         tc = theme_colors(self.dark_mode)
@@ -542,9 +513,18 @@ class SituacionesDashboard(ft.Container):
             self.todos_los_registros = self.controller.obtener_todos()
         self.registros_filtrados = list(self.todos_los_registros)
         self._actualizar_panel_info()
+        self._rebuild_filter_panel()
         self._render_tabla()
         
         self._show_loading(False)
+
+    def _rebuild_filter_panel(self):
+        if hasattr(self, '_filter_panel'):
+            self._tipos_situacion = self._get_unique_values("tipo_situacion")
+            self._filter_panel._dropdowns.clear()
+            self._filter_panel.add_dropdown("tipo", "Tipo de Situación", self._tipos_situacion)
+            opciones_estado = ["Todos", "Activo", "Resuelto"]
+            self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
 
     def _actualizar_panel_info(self):
         total = len(self.todos_los_registros)
@@ -553,34 +533,14 @@ class SituacionesDashboard(ft.Container):
         privados = sum(1 for s in self.todos_los_registros if s.get("tipo_situacion") == "Privado de libertad")
         desertores = sum(1 for s in self.todos_los_registros if s.get("tipo_situacion") == "Presunto desertor")
 
-        self.stat_activas.content.controls[1].value = str(activas)
-        self.stat_resueltas.content.controls[1].value = str(resueltas)
-        self.stat_privados.content.controls[1].value = str(privados)
-        self.stat_desertores.content.controls[1].value = str(desertores)
+        self.stats_panel.actualizar({
+            "activas": activas,
+            "resueltas": resueltas,
+            "privados": privados,
+            "desertores": desertores,
+        })
         
         self.panel_stats.visible = total > 0
-        try:
-            self.panel_stats.update()
-        except RuntimeError:
-            pass
-
-    def _stat_card(self, icon, value, label, accent):
-        tc = theme_colors(self.dark_mode)
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Icon(icon, size=20, color=accent),
-                    ft.Container(expand=True),
-                ]),
-                ft.Text(value, size=26, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Text(label, size=11, color=tc["text_secondary"]),
-            ], spacing=4),
-            bgcolor=tc["stat_bg"],
-            border_radius=14,
-            padding=ft.padding.symmetric(vertical=20, horizontal=22),
-            expand=True,
-            border=ft.border.all(1, tc["stat_border"]),
-        )
 
     def _show_loading(self, show):
         if show:

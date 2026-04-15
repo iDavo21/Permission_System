@@ -1,4 +1,5 @@
 from core.database import get_connection, get_db_path
+from core.validators import validar_situacion
 
 DB_NAME = "situaciones_irregulares.db"
 PERSONAL_DB = "personal.db"
@@ -39,6 +40,10 @@ class SituacionIrregularModel:
 
     @staticmethod
     def save(datos: dict) -> int:
+        ok, msg, errores = validar_situacion(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         conn = SituacionIrregularModel._connect()
         try:
             cursor = conn.execute("""
@@ -110,10 +115,15 @@ class SituacionIrregularModel:
 
     @staticmethod
     def update(situacion_id: int, datos: dict):
+        ok, msg, errores = validar_situacion(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         conn = SituacionIrregularModel._connect()
         try:
             conn.execute("""
                 UPDATE situaciones_irregulares SET
+                    personal_id = :personal_id,
                     tipo_situacion = :tipo_situacion,
                     fecha_inicio = :fecha_inicio,
                     fecha_resolucion = :fecha_resolucion,
@@ -153,6 +163,19 @@ class SituacionIrregularModel:
                 WHERE id = ?
             """, (fecha_resolucion, situacion_id))
             conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def tiene_situacion_activa(personal_id: int) -> bool:
+        """Verifica si una persona tiene una situación irregular activa."""
+        conn = SituacionIrregularModel._connect()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM situaciones_irregulares WHERE personal_id = ? AND estado = 'Activo'",
+                (personal_id,)
+            ).fetchone()[0]
+            return count > 0
         finally:
             conn.close()
 

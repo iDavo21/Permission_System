@@ -5,6 +5,9 @@ from core.estado_utils import obtener_estado, fecha_a_datetime, contar_expiracio
 from core.constants import FECHA_FORMAT, TIPOS_COMISION
 from core.theme import theme_colors
 from core.components.loading import LoadingIndicator
+from core.components.pagination import PaginationControl
+from core.components.filter_panel_base import FilterPanelBase, FilterPanelContainer
+from core.components.stats_panel import StatsPanel
 
 
 class ComisionesDashboard(ft.Container):
@@ -104,14 +107,20 @@ class ComisionesDashboard(ft.Container):
             border=ft.border.all(1, tc["border_primary"]),
         )
 
-        self.stat_activas = self._stat_card(ft.Icons.PLAY_ARROW, "0", "Comisiones Activas", ft.Colors.ORANGE_400)
-        self.stat_finalizadas = self._stat_card(ft.Icons.CHECK_CIRCLE, "0", "Comisiones Finalizadas", ft.Colors.GREEN_400)
-        self.stat_por_salir = self._stat_card(ft.Icons.SCHEDULE, "0", "Por Salir", ft.Colors.CYAN_400)
-
-        self.panel_stats = ft.Container(
-            content=ft.Row([self.stat_activas, self.stat_finalizadas, self.stat_por_salir], spacing=16),
-            margin=ft.margin.only(left=24, right=24, bottom=12),
+        self.stats_config = [
+            {"key": "activas", "icon": ft.Icons.PLAY_ARROW, "value": "0", "label": "Comisión Activa", "accent": ft.Colors.ORANGE_400},
+            {"key": "finalizadas", "icon": ft.Icons.CHECK_CIRCLE, "value": "0", "label": "Comisiones Finalizadas", "accent": ft.Colors.GREEN_400},
+            {"key": "por_salir", "icon": ft.Icons.SCHEDULE, "value": "0", "label": "Por Salir", "accent": ft.Colors.CYAN_400},
+        ]
+        
+        self.stats_panel = StatsPanel(
+            cards_config=self.stats_config,
+            dark_mode=self.dark_mode,
+            spacing=16,
+            margin=ft.margin.only(left=24, right=24, bottom=12)
         )
+        
+        self.panel_stats = self.stats_panel
 
         self.mensaje_vacio = ft.Column(
             controls=[
@@ -223,40 +232,46 @@ class ComisionesDashboard(ft.Container):
 
         self._build_filter_panel(tc)
 
-        self.content = ft.Column(
+        self.content = ft.Stack(
             controls=[
-                ft.Container(
-                    content=ft.Row([
-                        ft.Row([
-                            ft.Container(
-                                content=ft.Icon(ft.Icons.BUSINESS_CENTER, color=ft.Colors.GREEN_400, size=26),
-                                bgcolor=tc["icon_bg"],
-                                border_radius=10,
-                                padding=10,
-                            ),
-                            ft.Column([
-                                ft.Text("Control de Comisiones", size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                                ft.Text("Gestiona las comisiones del personal", size=12, color=tc["text_secondary"]),
-                            ], spacing=2),
-                        ], spacing=14),
-                        ft.Container(expand=True),
-                        self.search_field,
-                        ft.Container(width=8),
-                        self.btn_filter,
-                        ft.Container(width=8),
-                        self.btn_add,
-                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                    padding=ft.padding.symmetric(horizontal=24, vertical=16),
-                    bgcolor=tc["header_bg"],
-                    border=ft.border.all(1, tc["header_border"]),
-                    border_radius=14,
-                    margin=ft.margin.only(left=24, right=24, top=16),
+                ft.Column(
+                    controls=[
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Row([
+                                    ft.Container(
+                                        content=ft.Icon(ft.Icons.BUSINESS_CENTER, color=ft.Colors.GREEN_400, size=26),
+                                        bgcolor=tc["icon_bg"],
+                                        border_radius=10,
+                                        padding=10,
+                                    ),
+                                    ft.Column([
+                                        ft.Text("Control de Comisiones", size=20, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
+                                        ft.Text("Gestiona las comisiones del personal", size=12, color=tc["text_secondary"]),
+                                    ], spacing=2),
+                                ], spacing=14),
+                                ft.Container(expand=True),
+                                self.search_field,
+                                ft.Container(width=8),
+                                self.btn_filter,
+                                ft.Container(width=8),
+                                self.btn_add,
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            padding=ft.padding.symmetric(horizontal=24, vertical=16),
+                            bgcolor=tc["header_bg"],
+                            border=ft.border.all(1, tc["header_border"]),
+                            border_radius=14,
+                            margin=ft.margin.only(left=24, right=24, top=16),
+                        ),
+                        ft.Container(height=12),
+                        ft.Stack([
+                            self.content_area,
+                            self.mensaje_vacio,
+                        ], expand=True),
+                    ],
+                    expand=True,
                 ),
-                ft.Container(height=12),
-                ft.Stack([
-                    self.content_area,
-                    self.mensaje_vacio,
-                ], expand=True),
+                self._filter_container,
             ],
             expand=True,
         )
@@ -264,83 +279,80 @@ class ComisionesDashboard(ft.Container):
     def _build_filter_panel(self, tc):
         self._tipos_comision = self._get_unique_values("tipo_comision")
 
-        self.filtro_tipo = ft.Dropdown(
-            label="Tipo de Comisión",
-            width=200,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(t) for t in self._tipos_comision],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
+        self._filter_panel = FilterPanelBase(
+            on_apply=self._on_filter_apply,
+            on_close=self._toggle_filtros,
+            dark_mode=self.dark_mode,
+            show_search=False
+        )
+        
+        self._filter_panel.add_dropdown("tipo", "Tipo de Comisión", self._tipos_comision)
+        
+        opciones_estado = ["Todos", "Por Salir", "Activa", "Finalizada"]
+        self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
+        
+        self._filter_panel.add_date_field("fecha_desde", "Desde")
+        self._filter_panel.add_date_field("fecha_hasta", "Hasta")
+        
+        self._filter_container = FilterPanelContainer(
+            filter_panel=self._filter_panel,
+            dark_mode=self.dark_mode
         )
 
-        self.filtro_estado = ft.Dropdown(
-            label="Estado",
-            width=150,
-            options=[
-                ft.dropdown.Option("Todos"),
-                ft.dropdown.Option("Activo"),
-                ft.dropdown.Option("Por Expirar"),
-                ft.dropdown.Option("Expirado"),
-            ],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
-        )
+    def _on_filter_apply(self, filtros):
+        tipo = filtros.get("tipo", "Todos")
+        estado = filtros.get("estado", "Todos")
+        fecha_desde = filtros.get("fecha_desde", "").strip()
+        fecha_hasta = filtros.get("fecha_hasta", "").strip()
 
-        self.btn_aplicar_filtros = ft.Container(
-            content=ft.Text("Aplicar", color=ft.Colors.WHITE, size=13, weight=ft.FontWeight.BOLD),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._aplicar_filtros(),
-        )
+        resultado = []
+        for c in self.todos_los_registros:
+            if tipo and tipo != "Todos":
+                if c.get("tipo_comision", "") != tipo:
+                    continue
 
-        self.btn_limpiar_filtros = ft.Container(
-            content=ft.Text("Limpiar", color=tc["text_secondary"], size=13),
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._limpiar_filtros(),
-        )
+            if estado and estado != "Todos":
+                from datetime import datetime
+                finalizada = c.get("finalizada", 0)
+                fecha_salida = c.get("fecha_salida", "")
+                hoy = datetime.now().strftime(FECHA_FORMAT)
+                
+                if finalizada:
+                    estado_texto = "Finalizada"
+                elif fecha_salida and fecha_salida > hoy:
+                    estado_texto = "Por Salir"
+                else:
+                    estado_texto = "Activa"
+                    
+                if estado_texto != estado:
+                    continue
+            
+            if fecha_desde or fecha_hasta:
+                fecha_comision = c.get("fecha_salida", "")
+                if fecha_comision:
+                    if fecha_desde and fecha_comision < fecha_desde:
+                        continue
+                    if fecha_hasta and fecha_comision > fecha_hasta:
+                        continue
 
-        self._filter_panel = ft.Container(
-            content=ft.Column([
-                ft.Text("Filtros", size=16, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Container(height=12),
-                ft.Row([self.filtro_tipo, ft.Container(width=12), self.filtro_estado]),
-                ft.Container(height=12),
-                ft.Row([self.btn_aplicar_filtros, ft.Container(width=8), self.btn_limpiar_filtros]),
-            ], spacing=0),
-            bgcolor=tc["bg_dialog"],
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=12,
-            padding=16,
-            width=420,
-            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK)),
-        )
+            resultado.append(c)
 
-        self._filter_panel_container = ft.Container(
-            content=ft.Row([
-                self._filter_panel,
-            ], alignment=ft.MainAxisAlignment.END),
-            padding=ft.padding.only(right=24),
-            top=145,
-            right=0,
-            left=0,
-            opacity=0,
-            visible=False,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
+        self.registros_filtrados = resultado
+        self.pagina_actual = 1
+        self._render_tabla()
+
+    def _limpiar_filtros(self):
+        self._filter_panel._limpiar()
+        self.registros_filtrados = list(self.todos_los_registros)
+        self.pagina_actual = 1
+        self._render_tabla()
+
+    def _toggle_filtros(self, e=None):
+        self.filtros_abiertos = not self.filtros_abiertos
+        if self.filtros_abiertos:
+            self._filter_container.show()
+        else:
+            self._filter_container.hide()
 
     def _get_unique_values(self, field):
         valores = set()
@@ -350,54 +362,48 @@ class ComisionesDashboard(ft.Container):
                 valores.add(val)
         return sorted(valores)
 
-    def _toggle_filtros(self, e):
+    def _toggle_filtros(self, e=None):
         self.filtros_abiertos = not self.filtros_abiertos
-        self._filter_panel_container.visible = self.filtros_abiertos
-        self._filter_panel_container.opacity = 1.0 if self.filtros_abiertos else 0.0
-        self._filter_panel_container.update()
-
-    def _aplicar_filtros(self):
-        texto = (self.search_field.value or "").strip().lower()
-        tipo = self.filtro_tipo.value
-        estado = self.filtro_estado.value
-
-        resultado = []
-        for c in self.todos_los_registros:
-            if texto:
-                nombre = "%s %s" % (c.get("nombres", ""), c.get("apellidos", "")).lower()
-                cedula = c.get("cedula", "").lower()
-                destino = (c.get("destino", "") or "").lower()
-                if texto not in nombre and texto not in cedula and texto not in destino:
-                    continue
-
-            if tipo and tipo != "Todos":
-                if c.get("tipo_comision", "") != tipo:
-                    continue
-
-            if estado and estado != "Todos":
-                finalizada = c.get("finalizada", 0)
-                estado_texto = "FINALIZADA" if finalizada else "ACTIVA"
-                if estado_texto != estado:
-                    continue
-
-            resultado.append(c)
-
-        self.registros_filtrados = resultado
-        self.pagina_actual = 1
-        self._render_tabla()
-        self._toggle_filtros(None)
+        if self.filtros_abiertos:
+            self._filter_container.show()
+        else:
+            self._filter_container.hide()
 
     def _limpiar_filtros(self):
-        self.search_field.value = ""
-        self.filtro_tipo.value = "Todos"
-        self.filtro_estado.value = "Todos"
+        self._filter_panel._limpiar()
         self.registros_filtrados = list(self.todos_los_registros)
         self.pagina_actual = 1
         self._render_tabla()
         self._toggle_filtros(None)
 
     def _on_search(self, e):
-        self._aplicar_filtros()
+        filtros = self._filter_panel.get_filtros() if self._filter_panel else {}
+        filtros["texto"] = self.search_field.value or ""
+        self._on_filter_apply(filtros)
+        
+        texto = self.search_field.value.strip().lower()
+        
+        if not texto:
+            return
+        
+        resultado = []
+        for c in self.registros_filtrados:
+            nombres = c.get("nombres", "")
+            apellidos = c.get("apellidos", "")
+            if isinstance(nombres, tuple):
+                nombres = " ".join(str(n) for n in nombres) if nombres else ""
+            if isinstance(apellidos, tuple):
+                apellidos = " ".join(str(a) for a in apellidos) if apellidos else ""
+            
+            nombre_completo = ("%s %s" % (nombres, apellidos)).lower()
+            cedula = str(c.get("cedula", "")).lower()
+            
+            if texto in nombre_completo or texto in cedula:
+                resultado.append(c)
+        
+        self.registros_filtrados = resultado
+        self.pagina_actual = 1
+        self._render_tabla()
 
     def _render_tabla(self):
         tc = theme_colors(self.dark_mode)
@@ -416,8 +422,20 @@ class ComisionesDashboard(ft.Container):
             num = inicio + i + 1
             nombre = "%s %s" % (c.get("nombres", ""), c.get("apellidos", ""))
             finalizada = c.get("finalizada", 0)
-            estado_texto = "FINALIZADA" if finalizada else "ACTIVA"
-            estado_color = ft.Colors.GREEN_700 if finalizada else ft.Colors.ORANGE_700
+            from core.constants import FECHA_FORMAT
+            fecha_salida = c.get("fecha_salida", "")
+            from datetime import datetime
+            hoy = datetime.now().strftime(FECHA_FORMAT)
+            
+            if finalizada:
+                estado_texto = "Finalizada"
+                estado_color = ft.Colors.GREEN_700
+            elif fecha_salida and fecha_salida > hoy:
+                estado_texto = "Por Salir"
+                estado_color = ft.Colors.AMBER_700
+            else:
+                estado_texto = "Activa"
+                estado_color = ft.Colors.ORANGE_700
             cid = c.get("id")
 
             self.data_table.rows.append(
@@ -472,7 +490,10 @@ class ComisionesDashboard(ft.Container):
         self.tabla_container.visible = total > 0
         self.mensaje_vacio.visible = total == 0
         self.pagination_row.visible = total > 0
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def _cambiar_pagina(self, delta):
         total_paginas = max(1, (len(self.registros_filtrados) + self.registros_por_pagina - 1) // self.registros_por_pagina)
@@ -588,48 +609,38 @@ class ComisionesDashboard(ft.Container):
             self.todos_los_registros = self.controller.obtener_todos()
         self.registros_filtrados = list(self.todos_los_registros)
         self._actualizar_panel_info()
+        self._rebuild_filter_panel()
         self._render_tabla()
         
         self._show_loading(False)
 
+    def _rebuild_filter_panel(self):
+        if hasattr(self, '_filter_panel'):
+            self._tipos_comision = self._get_unique_values("tipo_comision")
+            self._filter_panel._dropdowns.clear()
+            self._filter_panel.add_dropdown("tipo", "Tipo de Comisión", self._tipos_comision)
+            opciones_estado = ["Todos", "Por Salir", "Activa", "Finalizada"]
+            self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
+
     def _actualizar_panel_info(self):
+        from core.constants import FECHA_FORMAT
         from datetime import datetime
         total = len(self.todos_los_registros)
-        activas = sum(1 for c in self.todos_los_registros if not c.get("finalizada", 0))
-        finalizadas = total - activas
         
-        hoy = datetime.now().strftime("%d/%m/%Y")
+        hoy = datetime.now().strftime(FECHA_FORMAT)
         por_salir = sum(1 for c in self.todos_los_registros 
                         if not c.get("finalizada", 0) 
                         and c.get("fecha_salida", "") > hoy)
+        activas = sum(1 for c in self.todos_los_registros if not c.get("finalizada", 0) and c.get("fecha_salida", "") <= hoy)
+        finalizadas = total - por_salir - activas
 
-        self.stat_activas.content.controls[1].value = str(activas)
-        self.stat_finalizadas.content.controls[1].value = str(finalizadas)
-        self.stat_por_salir.content.controls[1].value = str(por_salir)
+        self.stats_panel.actualizar({
+            "activas": activas,
+            "finalizadas": finalizadas,
+            "por_salir": por_salir,
+        })
         
         self.panel_stats.visible = total > 0
-        try:
-            self.panel_stats.update()
-        except RuntimeError:
-            pass
-        
-    def _stat_card(self, icon, value, label, accent):
-        tc = theme_colors(self.dark_mode)
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Icon(icon, size=20, color=accent),
-                    ft.Container(expand=True),
-                ]),
-                ft.Text(value, size=26, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Text(label, size=11, color=tc["text_secondary"]),
-            ], spacing=4),
-            bgcolor=tc["stat_bg"],
-            border_radius=14,
-            padding=ft.padding.symmetric(vertical=20, horizontal=22),
-            expand=True,
-            border=ft.border.all(1, tc["stat_border"]),
-        )
         
     def _show_loading(self, show):
         # For simplicity, we'll overlay the loading indicator
@@ -649,12 +660,20 @@ class ComisionesDashboard(ft.Container):
         else:
             if hasattr(self, '_loading_overlay') and self._loading_overlay:
                 self._loading_overlay.visible = False
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def did_mount(self):
         self.load_data()
+        if hasattr(self, '_filter_container'):
+            self._filter_container.set_page(self.page)
         async def animate():
             await asyncio.sleep(0.05)
             self.opacity = 1
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())

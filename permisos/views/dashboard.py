@@ -4,8 +4,11 @@ from datetime import datetime
 from core.estado_utils import obtener_estado, fecha_a_datetime, obtener_estado_urgencia, contar_expiracion_proxima
 from core.constants import FECHA_FORMAT, TIPOS_PERMISO, DIAS_EXPIRACION_PRONTO
 from core.theme import theme_colors
-from permisos.views.components import PermisosTable, PaginationBar
+from core.components.pagination import PaginationControl
 from core.components.loading import LoadingIndicator
+from permisos.views.components import PermisosTable
+from core.components.filter_panel_base import FilterPanelBase, FilterPanelContainer
+from core.components.stats_panel import StatsPanel
 
 
 class AdminView(ft.Container):
@@ -32,9 +35,18 @@ class AdminView(ft.Container):
 
         tipos = sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO)
 
-        self.stat_vigentes = self._stat_card(ft.Icons.CHECK_CIRCLE, "0", "Permisos Vigentes", ft.Colors.GREEN_400)
-        self.stat_por_expirar = self._stat_card(ft.Icons.WARNING_AMBER_ROUNDED, "0", "Por Expirar", ft.Colors.AMBER_400)
-        self.stat_expirados = self._stat_card(ft.Icons.CANCEL_OUTLINED, "0", "Expirados", ft.Colors.RED_400)
+        self.stats_config = [
+            {"key": "vigentes", "icon": ft.Icons.CHECK_CIRCLE, "value": "0", "label": "Permisos Vigentes", "accent": ft.Colors.GREEN_400},
+            {"key": "por_expirar", "icon": ft.Icons.WARNING_AMBER_ROUNDED, "value": "0", "label": "Por Expirar", "accent": ft.Colors.AMBER_400},
+            {"key": "expirados", "icon": ft.Icons.CANCEL_OUTLINED, "value": "0", "label": "Expirados", "accent": ft.Colors.RED_400},
+        ]
+        
+        self.stats_panel = StatsPanel(
+            cards_config=self.stats_config,
+            dark_mode=self.dark_mode,
+            spacing=16,
+            margin=ft.margin.only(left=24, right=24)
+        )
 
         self._table = PermisosTable(
             permisos=self.permisos_filtrados,
@@ -44,16 +56,13 @@ class AdminView(ft.Container):
             dark_mode=self.dark_mode,
         )
 
-        self._pagination = PaginationBar(
+        self._pagination = PaginationControl(
             on_change_page=self.cambiar_pagina,
             on_change_ppp=self.cambiar_registros_pagina,
             dark_mode=self.dark_mode,
         )
 
-        self.panel_stats = ft.Container(
-            content=ft.Row([self.stat_vigentes, self.stat_por_expirar, self.stat_expirados], spacing=16),
-            margin=ft.margin.only(left=24, right=24),
-        )
+        self.panel_stats = self.stats_panel
         
         self.loading_indicator = LoadingIndicator("Cargando permisos...", dark_mode=self.dark_mode)
 
@@ -233,117 +242,43 @@ class AdminView(ft.Container):
                     ],
                     expand=True,
                 ),
-                self._filter_panel_container,
+                self._filter_container,
             ],
             expand=True,
         )
 
     def _build_filter_panel(self, tc):
-        self.filtro_tipo = ft.Dropdown(
-            label="Tipo de Permiso",
-            width=180,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(t) for t in self._get_tipos()],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
+        self._tipos_permiso = self._get_tipos()
+
+        self._filter_panel = FilterPanelBase(
+            on_apply=self._on_filter_apply,
+            on_close=self._toggle_filtros,
+            dark_mode=self.dark_mode,
+            show_search=False,
+            page_ref=None
+        )
+        
+        self._filter_panel.add_dropdown("tipo", "Tipo de Permiso", self._tipos_permiso)
+        
+        opciones_estado = ["Todos", "Vigente", "Por Expirar", "Expirado"]
+        self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)
+        
+        self._filter_panel.add_date_field("fecha_desde", "Desde", page=None)
+        self._filter_panel.add_date_field("fecha_hasta", "Hasta", page=None)
+        
+        self._filter_container = FilterPanelContainer(
+            filter_panel=self._filter_panel,
+            dark_mode=self.dark_mode
         )
 
-        self.filtro_estado = ft.Dropdown(
-            label="Estado",
-            width=150,
-            options=[
-                ft.dropdown.Option("Todos"),
-                ft.dropdown.Option("Activo"),
-                ft.dropdown.Option("Por Expirar"),
-                ft.dropdown.Option("Expirado"),
-            ],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
-        )
-
-        self.btn_aplicar_filtros = ft.Container(
-            content=ft.Text("Aplicar", color=ft.Colors.WHITE, size=13, weight=ft.FontWeight.BOLD),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._aplicar_filtros(),
-        )
-
-        self.btn_limpiar_filtros = ft.Container(
-            content=ft.Text("Limpiar", color=tc["text_secondary"], size=13),
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._limpiar_filtros(),
-        )
-
-        self._filter_panel = ft.Container(
-            content=ft.Column([
-                ft.Text("Filtros", size=16, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Container(height=12),
-                ft.Row([self.filtro_tipo, ft.Container(width=12), self.filtro_estado]),
-                ft.Container(height=12),
-                ft.Row([self.btn_aplicar_filtros, ft.Container(width=8), self.btn_limpiar_filtros]),
-            ], spacing=0),
-            bgcolor=tc["bg_dialog"],
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=12,
-            padding=16,
-            width=400,
-            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK)),
-        )
-
-        self._filter_panel_container = ft.Container(
-            content=ft.Row([
-                self._filter_panel,
-            ], alignment=ft.MainAxisAlignment.END),
-            padding=ft.padding.only(right=24),
-            top=145,
-            right=0,
-            left=0,
-            opacity=0,
-            visible=False,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
-
-    def _get_tipos(self):
-        return sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO)
-
-    def _on_fab_hover(self, e):
-        if self.page:
-            self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
-            self.update()
-
-    def _toggle_filtros(self, e):
-        self.filtros_abiertos = not self.filtros_abiertos
-        self._filter_panel_container.visible = self.filtros_abiertos
-        self._filter_panel_container.opacity = 1.0 if self.filtros_abiertos else 0.0
-        self._filter_panel_container.update()
-
-    def _aplicar_filtros(self):
-        texto = (self.search_field.value or "").strip().lower()
-        tipo = self.filtro_tipo.value
-        estado = self.filtro_estado.value
+    def _on_filter_apply(self, filtros):
+        tipo = filtros.get("tipo", "Todos")
+        estado = filtros.get("estado", "Todos")
+        fecha_desde = filtros.get("fecha_desde", "").strip()
+        fecha_hasta = filtros.get("fecha_hasta", "").strip()
 
         resultado = []
         for p in self.todos_los_permisos:
-            if texto:
-                nombre_completo = "%s %s" % (p.get("nombres", ""), p.get("apellidos", "")).lower()
-                cedula = p.get("cedula", "").lower()
-                if texto not in nombre_completo and texto not in cedula:
-                    continue
-
             if tipo and tipo != "Todos":
                 if p.get("tipo_permiso", "") != tipo:
                     continue
@@ -352,31 +287,89 @@ class AdminView(ft.Container):
                 estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
                 if estado_texto != estado:
                     continue
+            
+            if fecha_desde or fecha_hasta:
+                fecha_permiso = p.get("fecha_desde", "")
+                if fecha_permiso:
+                    if fecha_desde and fecha_permiso < fecha_desde:
+                        continue
+                    if fecha_hasta and fecha_permiso > fecha_hasta:
+                        continue
 
             resultado.append(p)
 
         self.permisos_filtrados = resultado
         self.pagina_actual = 1
         self.actualizar_tabla(resultado)
-        self._toggle_filtros(None)
 
     def _limpiar_filtros(self):
-        self.search_field.value = ""
-        self.filtro_tipo.value = "Todos"
-        self.filtro_estado.value = "Todos"
+        self._filter_panel._limpiar()
         self.permisos_filtrados = list(self.todos_los_permisos)
         self.pagina_actual = 1
         self.actualizar_tabla(self.todos_los_permisos)
-        self._toggle_filtros(None)
+
+    def _get_tipos(self):
+        return sorted(set(p.get("tipo_permiso", "") for p in self.todos_los_permisos if p.get("tipo_permiso")) or TIPOS_PERMISO)
+
+    def _on_fab_hover(self, e):
+        if self.page:
+            self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
+            try:
+                self.update()
+            except RuntimeError:
+                pass
+
+    def _toggle_filtros(self, e=None):
+        self.filtros_abiertos = not self.filtros_abiertos
+        if self.filtros_abiertos:
+            self._filter_container.show()
+        else:
+            self._filter_container.hide()
 
     def _on_search(self, e):
+        filtros = self._filter_panel.get_filtros() if self._filter_panel else {}
+        filtros["texto"] = self.search_field.value or ""
+        
+        fecha_desde = filtros.get("fecha_desde", "").strip()
+        fecha_hasta = filtros.get("fecha_hasta", "").strip()
+        
         texto = self.search_field.value.strip().lower()
-        if texto:
-            resultado = [p for p in self.todos_los_permisos if 
-                        texto in ("%s %s" % (p.get("nombres", ""), p.get("apellidos", ""))).lower() or 
-                        texto in p.get("cedula", "").lower()]
-        else:
-            resultado = list(self.todos_los_permisos)
+        tipo = filtros.get("tipo", "Todos")
+        estado = filtros.get("estado", "Todos")
+        
+        resultado = []
+        for p in self.todos_los_permisos:
+            if texto:
+                nombres = p.get("nombres", "")
+                apellidos = p.get("apellidos", "")
+                if isinstance(nombres, tuple):
+                    nombres = " ".join(str(n) for n in nombres) if nombres else ""
+                if isinstance(apellidos, tuple):
+                    apellidos = " ".join(str(a) for a in apellidos) if apellidos else ""
+                nombre_completo = ("%s %s" % (nombres, apellidos)).lower()
+                cedula = str(p.get("cedula", "")).lower()
+                if texto not in nombre_completo and texto not in cedula:
+                    continue
+            
+            if tipo and tipo != "Todos":
+                if p.get("tipo_permiso", "") != tipo:
+                    continue
+
+            if estado and estado != "Todos":
+                estado_texto, _ = obtener_estado(p.get("fecha_hasta", ""))
+                if estado_texto != estado:
+                    continue
+            
+            if fecha_desde or fecha_hasta:
+                fecha_permiso = p.get("fecha_desde", "")
+                if fecha_permiso:
+                    if fecha_desde and fecha_permiso < fecha_desde:
+                        continue
+                    if fecha_hasta and fecha_permiso > fecha_hasta:
+                        continue
+            
+            resultado.append(p)
+        
         self.permisos_filtrados = resultado
         self.pagina_actual = 1
         self.actualizar_tabla(resultado)
@@ -442,7 +435,10 @@ class AdminView(ft.Container):
         else:
             if hasattr(self, '_loading_overlay') and self._loading_overlay:
                 self._loading_overlay.visible = False
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def _confirmar_eliminacion(self, permiso_id):
         if self.on_delete:
@@ -451,15 +447,29 @@ class AdminView(ft.Container):
     def load_data(self):
         self.todos_los_permisos = self.todos_los_permisos
         self.permisos_filtrados = list(self.todos_los_permisos)
+        self._rebuild_filter_panel()
         self._actualizar_stats()
         self.actualizar_tabla(self.todos_los_permisos)
 
+    def _rebuild_filter_panel(self):
+        if hasattr(self, 'filtro_tipo'):
+            self.filtro_tipo.options = [ft.dropdown.Option("Todos")] + [ft.dropdown.Option(t) for t in self._get_tipos()]
+            self.filtro_tipo.value = "Todos"
+            self.filtro_estado.value = "Todos"
+            self.filtro_tipo.update()
+            self.filtro_estado.update()
+
     def did_mount(self):
         self.load_data()
+        if hasattr(self, '_filter_container'):
+            self._filter_container.set_page(self.page)
         async def animate():
             await asyncio.sleep(0.05)
             self.opacity = 1
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())
 
     def _actualizar_stats(self):
@@ -477,28 +487,16 @@ class AdminView(ft.Container):
             elif estado_texto == "Expirado":
                 expirados += 1
         
-        self.stat_vigentes.content.controls[1].value = str(vigentes)
-        self.stat_por_expirar.content.controls[1].value = str(por_expirar)
-        self.stat_expirados.content.controls[1].value = str(expirados)
-        try:
-            self.panel_stats.update()
-        except RuntimeError:
-            pass
+        self.stats_panel.actualizar({
+            "vigentes": vigentes,
+            "por_expirar": por_expirar,
+            "expirados": expirados,
+        })
 
-    def _stat_card(self, icon, value, label, accent):
-        tc = theme_colors(self.dark_mode)
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Icon(icon, size=20, color=accent),
-                    ft.Container(expand=True),
-                ]),
-                ft.Text(value, size=26, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Text(label, size=11, color=tc["text_secondary"]),
-            ], spacing=4),
-            bgcolor=tc["stat_bg"],
-            border_radius=14,
-            padding=ft.padding.symmetric(vertical=20, horizontal=22),
-            expand=True,
-            border=ft.border.all(1, tc["stat_border"]),
-        )
+    def _rebuild_filter_panel(self):
+        if hasattr(self, '_filter_panel'):
+            self._tipos_permiso = self._get_tipos()
+            self._filter_panel._dropdowns.clear()
+            self._filter_panel.add_dropdown("tipo", "Tipo de Permiso", self._tipos_permiso)
+            opciones_estado = ["Todos", "Vigente", "Por Expirar", "Expirado"]
+            self._filter_panel.add_dropdown("estado", "Estado", opciones_estado)

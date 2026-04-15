@@ -198,7 +198,10 @@ class LoginView(ft.Container):
             self.on_toggle_theme()
             self.dark_mode = not self.dark_mode
             self._build_ui()
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
             self._animate_in()
 
     def handle_login(self, e):
@@ -206,7 +209,10 @@ class LoginView(ft.Container):
 
     def show_error(self, message):
         self.mensaje.value = message
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def _animate_in(self):
         async def animate():
@@ -215,7 +221,10 @@ class LoginView(ft.Container):
             self._branding_wrapper.offset = ft.Offset(0, 0)
             self._form_wrapper.opacity = 1
             self._form_wrapper.offset = ft.Offset(0, 0)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())
 
     def did_mount(self):

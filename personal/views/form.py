@@ -143,7 +143,10 @@ class PersonalForm(ft.Container):
 
         if not self.txt_1er_nombre.value or not self.txt_1er_apellido.value or not self.txt_cedula.value:
             self.lbl_error.value = "1er Nombre, 1er Apellido y Cedula son obligatorios"
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
             return
 
         cedula_val = self.txt_cedula.value or ""
@@ -151,12 +154,18 @@ class PersonalForm(ft.Container):
 
         if len(cedula_val) < CEDULA_MIN or len(cedula_val) > CEDULA_MAX:
             self.lbl_error.value = f"La cédula debe tener entre {CEDULA_MIN} y {CEDULA_MAX} dígitos"
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
             return
 
         if telefono_val and (len(telefono_val) < TELEFONO_MIN or len(telefono_val) > TELEFONO_MAX):
             self.lbl_error.value = f"El teléfono debe tener entre {TELEFONO_MIN} y {TELEFONO_MAX} dígitos"
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
             return
 
         def _v(val):

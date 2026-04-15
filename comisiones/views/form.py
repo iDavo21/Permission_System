@@ -7,7 +7,7 @@ from core.constants import FECHA_FORMAT, TIPOS_COMISION
 from core.theme import theme_colors
 
 class ComisionForm(ft.Container):
-    def __init__(self, controller, personal_id=None, comision_id=None, on_save=None, on_back=None, dark_mode=True):
+    def __init__(self, controller, personal_id=None, comision_id=None, on_save=None, on_back=None, lista_permisos=None, lista_comisiones=None, lista_situaciones=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.alignment = ft.Alignment.CENTER
@@ -17,6 +17,9 @@ class ComisionForm(ft.Container):
         self.on_save = on_save
         self.on_back = on_back
         self.dark_mode = dark_mode
+        self.lista_permisos = lista_permisos or []
+        self.lista_comisiones = lista_comisiones or []
+        self.lista_situaciones = lista_situaciones or []
 
         self.personal_seleccionados = []
         self.modo_edicion = bool(comision_id)
@@ -96,7 +99,7 @@ class ComisionForm(ft.Container):
             label="Fecha de Elaboración",
             icon=ft.Icons.EDIT_DOCUMENT,
             width=W_FULL,
-            value=hoy.strftime("%d/%m/%Y"),
+            value=hoy.strftime(FECHA_FORMAT),
             read_only=True,
             bgcolor=tc["input_bg"],
             border_color=tc["input_border"],
@@ -286,10 +289,12 @@ class ComisionForm(ft.Container):
 
         def confirmar_seleccion(e):
             ids_existentes = {p["id"] for p in self.personal_seleccionados}
+            nuevos_seleccionados = []
             for row in list_view.controls:
                 chk = row.content
                 if chk.value and row.data["id"] not in ids_existentes:
-                    self.personal_seleccionados.append(row.data)
+                    nuevos_seleccionados.append(row.data)
+            self.personal_seleccionados.extend(nuevos_seleccionados)
             self.actualizar_etiquetas_personal()
             self.page.pop_dialog()
 
@@ -377,6 +382,49 @@ class ComisionForm(ft.Container):
             self.page.update()
             return
 
+        from core.validators import verificar_estado_personal
+        
+        personas_con_conflicto = []
+        for p in self.personal_seleccionados:
+            conflicto = verificar_estado_personal(
+                p.get("id"), 
+                "comisiones",
+                self.lista_permisos, 
+                self.lista_comisiones, 
+                self.lista_situaciones
+            )
+            if conflicto:
+                nombres = "%s %s" % (p.get("nombres", ""), p.get("apellidos", ""))
+                personas_con_conflicto.append({"nombre": nombres, "conflicto": conflicto})
+        
+        if personas_con_conflicto:
+            mensaje = "El personal seleccionado ya está activo en otro módulo:\n"
+            for item in personas_con_conflicto:
+                mensaje += f"• {item['nombre']}: {item['conflicto']}\n"
+            mensaje += "\n¿Desea guardar de todas formas?"
+            
+            def on_confirmar(e):
+                self.page.pop_dialog()
+                self._guardar_comisiones(datos_base)
+            
+            def on_cancelar(e):
+                self.page.pop_dialog()
+            
+            dlg = ft.AlertDialog(
+                title=ft.Text("⚠️ Advertencia"),
+                content=ft.Text(mensaje),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=on_cancelar),
+                    ft.ElevatedButton("Guardar de todas formas", on_click=on_confirmar),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            self.page.show_dialog(dlg)
+            return
+
+        self._guardar_comisiones(datos_base)
+
+    def _guardar_comisiones(self, datos_base):
         datos_base = {
             "tipo_comision": self.tipo_comision.value,
             "destino": self.destino.value,
@@ -434,5 +482,8 @@ class ComisionForm(ft.Container):
             await asyncio.sleep(0.05)
             self._card_wrapper.opacity = 1
             self._card_wrapper.offset = ft.Offset(0, 0)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())

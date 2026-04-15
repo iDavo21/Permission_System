@@ -3,10 +3,12 @@ import asyncio
 from core.theme import theme_colors
 from core.constants import CEDULA_MIN, CEDULA_MAX, TELEFONO_MIN, TELEFONO_MAX
 from core.components.loading import LoadingIndicator
+from core.components.stats_panel import StatsPanel
+from core.components.filter_panel_base import FilterPanelBase, FilterPanelContainer
 
 
 class PersonalDashboard(ft.Container):
-    def __init__(self, controller, on_navigate_permisos, on_navigate_comisiones, on_add_personal=None, on_edit_personal=None, on_delete_personal=None, dark_mode=True):
+    def __init__(self, controller, on_navigate_permisos, on_navigate_comisiones, on_add_personal=None, on_edit_personal=None, on_delete_personal=None, lista_permisos=None, lista_comisiones=None, lista_situaciones=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.controller = controller
@@ -15,6 +17,9 @@ class PersonalDashboard(ft.Container):
         self.on_add_personal = on_add_personal
         self.on_edit_personal = on_edit_personal
         self.on_delete_personal = on_delete_personal
+        self.lista_permisos = lista_permisos or []
+        self.lista_comisiones = lista_comisiones or []
+        self.lista_situaciones = lista_situaciones or []
         self.dark_mode = dark_mode
 
         self.todos_los_registros = []
@@ -71,11 +76,11 @@ class PersonalDashboard(ft.Container):
         self.data_table = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("#", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
-                ft.DataColumn(ft.Text("Nombre Completo", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
-                ft.DataColumn(ft.Text("Cedula", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
                 ft.DataColumn(ft.Text("Grado", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
-                ft.DataColumn(ft.Text("Cargo", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
-                ft.DataColumn(ft.Text("Telefono", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
+                ft.DataColumn(ft.Text("Nombre Completo", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
+                ft.DataColumn(ft.Text("Cédula", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
+                ft.DataColumn(ft.Text("Estado", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
+                ft.DataColumn(ft.Text("Teléfono", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
                 ft.DataColumn(ft.Text("Acciones", weight=ft.FontWeight.BOLD, color=tc["table_header"], size=12)),
             ],
             rows=[],
@@ -107,9 +112,18 @@ class PersonalDashboard(ft.Container):
             border=ft.border.all(1, tc["border_primary"]),
         )
 
-        self.stat_total = self._stat_card(ft.Icons.PEOPLE, "0", "Personal Registrado", ft.Colors.GREEN_400)
-        self.stat_activos = self._stat_card(ft.Icons.BADGE, "0", "Con Cargo Asignado", ft.Colors.CYAN_400)
-        self.stat_grados = self._stat_card(ft.Icons.MILITARY_TECH, "0", "Grados Distintos", ft.Colors.AMBER_400)
+        self.stats_config = [
+            {"key": "disponibles", "icon": ft.Icons.PEOPLE, "value": "0", "label": "Personal Disponible", "accent": ft.Colors.GREEN_400},
+            {"key": "activos", "icon": ft.Icons.BADGE, "value": "0", "label": "Con Cargo Asignado", "accent": ft.Colors.CYAN_400},
+            {"key": "grados", "icon": ft.Icons.MILITARY_TECH, "value": "0", "label": "Grados Distintos", "accent": ft.Colors.AMBER_400},
+        ]
+        
+        self.stats_panel = StatsPanel(
+            cards_config=self.stats_config,
+            dark_mode=self.dark_mode,
+            spacing=16,
+            margin=ft.margin.only(left=24, right=24)
+        )
 
         self.lbl_prev = ft.IconButton(icon=ft.Icons.CHEVRON_LEFT, icon_color=tc["text_secondary"], on_click=lambda e: self._cambiar_pagina(-1))
         self.lbl_next = ft.IconButton(icon=ft.Icons.CHEVRON_RIGHT, icon_color=tc["text_secondary"], on_click=lambda e: self._cambiar_pagina(1))
@@ -208,11 +222,7 @@ class PersonalDashboard(ft.Container):
                         ),
                         ft.Container(height=12),
                         ft.Container(
-                            content=ft.Row([
-                                self.stat_total,
-                                self.stat_activos,
-                                self.stat_grados,
-                            ], spacing=16),
+                            content=self.stats_panel,
                             margin=ft.margin.only(left=24, right=24),
                         ),
                         ft.Container(height=12),
@@ -223,7 +233,7 @@ class PersonalDashboard(ft.Container):
                     ],
                     expand=True,
                 ),
-                self._filter_panel_container,
+                self._filter_container,
             ],
             expand=True,
         )
@@ -232,78 +242,58 @@ class PersonalDashboard(ft.Container):
         self._tipos_grado = self._get_unique_values("grado_jerarquia")
         self._tipos_cargo = self._get_unique_values("cargo")
 
-        self.filtro_grado = ft.Dropdown(
-            label="Grado",
-            width=180,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(g) for g in self._tipos_grado],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
+        self._filter_panel = FilterPanelBase(
+            on_apply=self._on_filter_apply,
+            on_close=self._toggle_filtros,
+            dark_mode=self.dark_mode,
+            show_search=False
+        )
+        
+        self._filter_panel.add_dropdown("grado", "Grado", self._tipos_grado)
+        self._filter_panel.add_dropdown("cargo", "Cargo", self._tipos_cargo)
+        
+        self._filter_container = FilterPanelContainer(
+            filter_panel=self._filter_panel,
+            dark_mode=self.dark_mode
         )
 
-        self.filtro_cargo = ft.Dropdown(
-            label="Cargo",
-            width=180,
-            options=[ft.dropdown.Option("Todos")] + [ft.dropdown.Option(c) for c in self._tipos_cargo],
-            value="Todos",
-            border_radius=10,
-            filled=True,
-            bgcolor=tc["input_bg"],
-            border_color=tc["input_border"],
-            color=tc["input_text"],
-            label_style=ft.TextStyle(color=tc["input_label"]),
-        )
+    def _on_filter_apply(self, filtros):
+        texto = filtros.get("texto", "")
+        grado = filtros.get("grado", "Todos")
+        cargo = filtros.get("cargo", "Todos")
 
-        self.btn_aplicar_filtros = ft.Container(
-            content=ft.Text("Aplicar", color=ft.Colors.WHITE, size=13, weight=ft.FontWeight.BOLD),
-            bgcolor=ft.Colors.GREEN_700,
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._aplicar_filtros(),
-        )
+        resultado = []
+        for p in self.todos_los_registros:
+            # Filtro por texto (nombre o cedula)
+            if texto:
+                nombres = p.get("nombres", "")
+                apellidos = p.get("apellidos", "")
+                if isinstance(nombres, tuple):
+                    nombres = " ".join(str(n) for n in nombres) if nombres else ""
+                if isinstance(apellidos, tuple):
+                    apellidos = " ".join(str(a) for a in apellidos) if apellidos else ""
+                
+                nombre_completo = "%s %s" % (nombres, apellidos)
+                nombre_lower = nombre_completo.lower()
+                cedula = str(p.get("cedula", "")).lower()
+                
+                if texto.lower() not in nombre_lower and texto not in cedula:
+                    continue
 
-        self.btn_limpiar_filtros = ft.Container(
-            content=ft.Text("Limpiar", color=tc["text_secondary"], size=13),
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=8,
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
-            ink=True,
-            on_click=lambda e: self._limpiar_filtros(),
-        )
+            # Filtros por dropdown (grado y cargo)
+            if grado and grado != "Todos":
+                if p.get("grado_jerarquia", "") != grado:
+                    continue
 
-        self._filter_panel = ft.Container(
-            content=ft.Column([
-                ft.Text("Filtros", size=16, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Container(height=12),
-                ft.Row([self.filtro_grado, ft.Container(width=12), self.filtro_cargo]),
-                ft.Container(height=12),
-                ft.Row([self.btn_aplicar_filtros, ft.Container(width=8), self.btn_limpiar_filtros]),
-            ], spacing=0),
-            bgcolor=tc["bg_dialog"],
-            border=ft.border.all(1, tc["border_primary"]),
-            border_radius=12,
-            padding=16,
-            width=420,
-            shadow=ft.BoxShadow(blur_radius=20, spread_radius=2, color=ft.Colors.with_opacity(0.3, ft.Colors.BLACK)),
-        )
+            if cargo and cargo != "Todos":
+                if p.get("cargo", "") != cargo:
+                    continue
 
-        self._filter_panel_container = ft.Container(
-            content=ft.Row([
-                self._filter_panel,
-            ], alignment=ft.MainAxisAlignment.END),
-            padding=ft.padding.only(right=24),
-            top=145,
-            right=0,
-            left=0,
-            opacity=0,
-            visible=False,
-            animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN_OUT),
-        )
+            resultado.append(p)
+
+        self.registros_filtrados = resultado
+        self.pagina_actual = 1
+        self._render_table()
 
     def _get_unique_values(self, field):
         valores = set()
@@ -313,28 +303,13 @@ class PersonalDashboard(ft.Container):
                 valores.add(val)
         return sorted(valores)
 
-    def _stat_card(self, icon, value, label, accent):
-        tc = theme_colors(self.dark_mode)
-        return ft.Container(
-            content=ft.Column([
-                ft.Row([
-                    ft.Icon(icon, size=20, color=accent),
-                    ft.Container(expand=True),
-                ]),
-                ft.Text(value, size=26, weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-                ft.Text(label, size=11, color=tc["text_secondary"]),
-            ], spacing=4),
-            bgcolor=tc["stat_bg"],
-            border_radius=14,
-            padding=ft.padding.symmetric(vertical=20, horizontal=22),
-            expand=True,
-            border=ft.border.all(1, tc["stat_border"]),
-        )
-
     def _on_fab_hover(self, e):
         if self.page:
             self.fab_tooltip.opacity = 1.0 if e.data == "true" else 0.0
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
 
     def _show_empty(self, show):
         self.empty_state.visible = show
@@ -358,53 +333,35 @@ class PersonalDashboard(ft.Container):
         else:
             if hasattr(self, '_loading_overlay') and self._loading_overlay:
                 self._loading_overlay.visible = False
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
-    def _toggle_filtros(self, e):
+    def _toggle_filtros(self, e=None):
         self.filtros_abiertos = not self.filtros_abiertos
-        self._filter_panel_container.visible = self.filtros_abiertos
-        self._filter_panel_container.opacity = 1.0 if self.filtros_abiertos else 0.0
-        self._filter_panel_container.update()
-
-    def _aplicar_filtros(self):
-        texto = (self.search_field.value or "").strip().lower()
-        grado = self.filtro_grado.value
-        cargo = self.filtro_cargo.value
-
-        resultado = []
-        for p in self.todos_los_registros:
-            if texto:
-                nombre_completo = "%s %s" % (p.get("nombres", ""), p.get("apellidos", "")).lower()
-                cedula = p.get("cedula", "").lower()
-                if texto not in nombre_completo and texto not in cedula:
-                    continue
-
-            if grado and grado != "Todos":
-                if p.get("grado_jerarquia", "") != grado:
-                    continue
-
-            if cargo and cargo != "Todos":
-                if p.get("cargo", "") != cargo:
-                    continue
-
-            resultado.append(p)
-
-        self.registros_filtrados = resultado
-        self.pagina_actual = 1
-        self._render_table()
-        self._toggle_filtros(None)
+        if self.filtros_abiertos:
+            self._filter_container.show()
+        else:
+            self._filter_container.hide()
 
     def _limpiar_filtros(self):
-        self.search_field.value = ""
-        self.filtro_grado.value = "Todos"
-        self.filtro_cargo.value = "Todos"
+        self._filter_panel._limpiar()
         self.registros_filtrados = list(self.todos_los_registros)
         self.pagina_actual = 1
         self._render_table()
         self._toggle_filtros(None)
 
     def _on_search(self, e):
-        self._aplicar_filtros()
+        texto = self.search_field.value or ""
+        filtros = {"texto": texto}
+        
+        if hasattr(self, '_filter_panel'):
+            filtros_grado = self._filter_panel.get_filtros()
+            filtros["grado"] = filtros_grado.get("grado", "Todos")
+            filtros["cargo"] = filtros_grado.get("cargo", "Todos")
+        
+        self._on_filter_apply(filtros)
 
     def _on_add(self, e):
         if self.on_add_personal:
@@ -431,25 +388,75 @@ class PersonalDashboard(ft.Container):
             if p.get("grado_jerarquia"):
                 grados.add(p["grado_jerarquia"])
 
-        self.stat_total.content.controls[1].value = str(len(self.todos_los_registros))
-        self.stat_activos.content.controls[1].value = str(len(cargos))
-        self.stat_grados.content.controls[1].value = str(len(grados))
+        from core.estado_utils import obtener_estado
+        permisos_activos_ids = set(p.get("personal_id") for p in self.lista_permisos if obtener_estado(p.get("fecha_hasta", ""))[0] in ("Vigente", "Por Expirar"))
+        comisiones_activas_ids = set(c.get("personal_id") for c in self.lista_comisiones if not c.get("finalizada", 0))
+        situaciones_activas_ids = set(s.get("personal_id") for s in self.lista_situaciones if s.get("estado", "Activo") == "Activo")
+        
+        ocupados_ids = permisos_activos_ids | comisiones_activas_ids | situaciones_activas_ids
+        
+        disponibles = sum(1 for p in self.todos_los_registros if p.get("id") not in ocupados_ids)
+
+        self.stats_panel.actualizar({
+            "disponibles": disponibles,
+            "activos": len(cargos),
+            "grados": len(grados),
+        })
 
         for idx, p in enumerate(pagina, start=inicio + 1):
             nombre_completo = "%s %s" % (p.get("nombres", ""), p.get("apellidos", ""))
+            
+            from core.validators import obtener_estado_personal
+            estado = obtener_estado_personal(
+                p.get("id"),
+                self.lista_permisos,
+                self.lista_comisiones,
+                self.lista_situaciones
+            )
+            
+            estado_info = estado.get("info", "")
+            estado_badge = ""
+            estado_color = ft.Colors.GREEN_700
+            estado_icono = ft.Icons.CHECK_CIRCLE
+            
+            if estado.get("estado") == "permiso":
+                estado_badge = "Permiso"
+                estado_color = ft.Colors.ORANGE_700
+                estado_icono = ft.Icons.BEACH_ACCESS
+            elif estado.get("estado") == "comision":
+                estado_badge = "Comisión"
+                estado_color = ft.Colors.BLUE_700
+                estado_icono = ft.Icons.BUSINESS_CENTER
+            elif estado.get("estado") == "situacion":
+                estado_badge = "Situación"
+                estado_color = ft.Colors.RED_700
+                estado_icono = ft.Icons.WARNING
+            else:
+                estado_badge = "Disponible"
+                estado_color = ft.Colors.GREEN_700
+                estado_icono = ft.Icons.CHECK_CIRCLE
+            
             self.data_table.rows.append(
                 ft.DataRow(
                     cells=[
                         ft.DataCell(ft.Text(str(idx), size=13, color=tc["table_row_text"])),
-                        ft.DataCell(ft.Text(nombre_completo, size=13, weight=ft.FontWeight.W_500, color=tc["table_name_text"])),
-                        ft.DataCell(ft.Text(p.get("cedula", ""), size=13, color=tc["table_row_text"])),
                         ft.DataCell(ft.Container(
                             content=ft.Text(p.get("grado_jerarquia", "—"), size=12, color=ft.Colors.AMBER_400),
                             bgcolor=tc["badge_amber"],
                             border_radius=6,
                             padding=ft.padding.symmetric(horizontal=10, vertical=4),
                         )),
-                        ft.DataCell(ft.Text(p.get("cargo", "—"), size=13, color=tc["table_row_text"])),
+                        ft.DataCell(ft.Text(nombre_completo, size=13, weight=ft.FontWeight.W_500, color=tc["table_name_text"])),
+                        ft.DataCell(ft.Text(p.get("cedula", ""), size=13, color=tc["table_row_text"])),
+                        ft.DataCell(ft.Container(
+                            content=ft.Row([
+                                ft.Icon(estado_icono, size=14, color=estado_color),
+                                ft.Text(estado_badge, size=12, color=estado_color),
+                            ], spacing=4),
+                            bgcolor=ft.Colors.with_opacity(0.15, estado_color),
+                            border_radius=6,
+                            padding=ft.padding.symmetric(horizontal=8, vertical=4),
+                        )),
                         ft.DataCell(ft.Text(p.get("telefono", "—"), size=13, color=tc["table_row_text"])),
                         ft.DataCell(ft.PopupMenuButton(
                             icon=ft.Icons.MORE_VERT,
@@ -481,7 +488,10 @@ class PersonalDashboard(ft.Container):
         self.lbl_next.disabled = self.pagina_actual >= total_paginas
 
         self._show_empty(total == 0)
-        self.update()
+        try:
+            self.update()
+        except RuntimeError:
+            pass
 
     def _cambiar_pagina(self, delta):
         total_paginas = max(1, (len(self.registros_filtrados) + self.registros_por_pagina - 1) // self.registros_por_pagina)
@@ -652,13 +662,25 @@ class PersonalDashboard(ft.Container):
         datos = self.controller.obtener_todos()
         self.todos_los_registros = datos
         self.registros_filtrados = list(datos)
+        self._rebuild_filter_panel()
         self._render_table()
         self._show_loading(False)
+
+    def _rebuild_filter_panel(self):
+        if hasattr(self, '_filter_panel'):
+            self._tipos_grado = self._get_unique_values("grado_jerarquia")
+            self._tipos_cargo = self._get_unique_values("cargo")
+            self._filter_panel._dropdowns.clear()
+            self._filter_panel.add_dropdown("grado", "Grado", self._tipos_grado)
+            self._filter_panel.add_dropdown("cargo", "Cargo", self._tipos_cargo)
 
     def did_mount(self):
         self.load_data()
         async def animate():
             await asyncio.sleep(0.05)
             self.opacity = 1
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())

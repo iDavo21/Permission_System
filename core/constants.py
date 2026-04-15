@@ -25,6 +25,9 @@ TIPOS_COMISION = [
     "Externa",
     "Temporal",
     "Permanente",
+    "Comisión de Estudio",
+    "Comisión URRA",
+    "Comisión CNE",
 ]
 
 TIPOS_SITUACION = [

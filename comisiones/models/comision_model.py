@@ -1,4 +1,5 @@
 from core.database import get_connection, get_db_path
+from core.validators import validar_comision
 
 DB_NAME = "comisiones.db"
 PERSONAL_DB = "personal.db"
@@ -40,6 +41,10 @@ class ComisionModel:
 
     @staticmethod
     def save(datos: dict) -> int:
+        ok, msg, errores = validar_comision(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         conn = ComisionModel._connect()
         try:
             cursor = conn.execute("""
@@ -113,6 +118,10 @@ class ComisionModel:
 
     @staticmethod
     def update(comision_id: int, datos: dict):
+        ok, msg, errores = validar_comision(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         datos['id'] = comision_id
         conn = ComisionModel._connect()
         try:
@@ -155,6 +164,19 @@ class ComisionModel:
         try:
             conn.execute("UPDATE comisiones SET finalizada = 1 WHERE id = ?", (comision_id,))
             conn.commit()
+        finally:
+            conn.close()
+
+    @staticmethod
+    def tiene_comision_activa(personal_id: int) -> bool:
+        """Verifica si una persona tiene una comisión activa (no finalizada)."""
+        conn = ComisionModel._connect()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM comisiones WHERE personal_id = ? AND finalizada = 0",
+                (personal_id,)
+            ).fetchone()[0]
+            return count > 0
         finally:
             conn.close()
 

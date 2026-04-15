@@ -134,7 +134,10 @@ class ComisionDetailView(ft.Container):
             await asyncio.sleep(0.05)
             self._card_wrapper.opacity = 1
             self._card_wrapper.offset = ft.Offset(0, 0)
-            self.update()
+            try:
+                self.update()
+            except RuntimeError:
+                pass
         asyncio.create_task(animate())
 
     def _confirmar_finalizar(self, e):

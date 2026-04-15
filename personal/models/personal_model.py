@@ -1,4 +1,5 @@
 from core.database import get_connection
+from core.validators import validar_personal
 
 DB_NAME = "personal.db"
 
@@ -39,6 +40,10 @@ class PersonalModel:
     @staticmethod
     def save(datos: dict) -> int:
         """Guarda un nuevo registro de personal."""
+        ok, msg, errores = validar_personal(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         conn = PersonalModel._connect()
         try:
             cursor = conn.execute("""
@@ -82,6 +87,10 @@ class PersonalModel:
     @staticmethod
     def update(personal_id: int, datos: dict):
         """Actualiza un registro de personal."""
+        ok, msg, errores = validar_personal(datos)
+        if not ok:
+            raise ValueError(msg)
+        
         datos['id'] = personal_id
         conn = PersonalModel._connect()
         try:

@@ -43,11 +43,14 @@ def eliminar_personal(app, personal_id):
         
         from permisos.controller import PermisosController
         from comisiones.controller import ComisionesController
+        from situaciones_irregulares.controller import SituacionesController
         permisos_ctrl = PermisosController()
         comisiones_ctrl = ComisionesController()
+        situaciones_ctrl = SituacionesController()
         
         permisos_ctrl.eliminar_por_personal(personal_id)
         comisiones_ctrl.eliminar_por_personal(personal_id)
+        situaciones_ctrl.eliminar_por_personal(personal_id)
         
         ok, err, msg = app.personal_ctrl.eliminar(personal_id)
         
@@ -78,7 +81,7 @@ def eliminar_personal(app, personal_id):
     dlg = ft.AlertDialog(
         modal=True,
         title=ft.Text("Confirmar eliminación", weight=ft.FontWeight.BOLD, color=tc["text_primary"]),
-        content=ft.Text("¿Estás seguro de eliminar este registro? Se eliminarán también sus permisos y comisiones.", color=tc["text_secondary"]),
+        content=ft.Text("¿Estás seguro de eliminar este registro? Se eliminarán también sus permisos, comisiones y situaciones irregulares.", color=tc["text_secondary"]),
         actions=[
             ft.TextButton("Cancelar", on_click=cancelar),
             ft.ElevatedButton("Eliminar", on_click=confirmar,

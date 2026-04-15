@@ -57,12 +57,19 @@ def mostrar_detalle_comision(app, comision_id):
 def mostrar_form_permiso(app, personal_id=None, permiso_id=None):
     from permisos.views.form import PermissionView
     
+    permisos = app.permisos_ctrl.obtener_todos()
+    comisiones = app.comisiones_ctrl.obtener_todos()
+    situaciones = app.situaciones_irregulares_ctrl.obtener_todos() if hasattr(app, 'situaciones_irregulares_ctrl') else []
+    
     def builder():
         form = PermissionView(
             on_back=app._go_to_permisos,
             on_save=app.guardar_permiso,
             personal_id=personal_id,
             permiso_id=permiso_id,
+            lista_permisos=permisos,
+            lista_comisiones=comisiones,
+            lista_situaciones=situaciones,
             dark_mode=app.dark_mode,
         )
         app.content_area.content = form
@@ -73,6 +80,10 @@ def mostrar_form_permiso(app, personal_id=None, permiso_id=None):
 def mostrar_form_comision(app, personal_id=None, comision_id=None):
     from comisiones.views.form import ComisionForm
     
+    permisos = app.permisos_ctrl.obtener_todos()
+    comisiones = app.comisiones_ctrl.obtener_todos()
+    situaciones = app.situaciones_irregulares_ctrl.obtener_todos() if hasattr(app, 'situaciones_irregulares_ctrl') else []
+    
     def builder():
         form = ComisionForm(
             controller=app.comisiones_ctrl,
@@ -80,6 +91,9 @@ def mostrar_form_comision(app, personal_id=None, comision_id=None):
             on_back=app._go_to_comisiones,
             personal_id=personal_id,
             comision_id=comision_id,
+            lista_permisos=permisos,
+            lista_comisiones=comisiones,
+            lista_situaciones=situaciones,
             dark_mode=app.dark_mode,
         )
         app.content_area.content = form
@@ -191,6 +205,10 @@ def mostrar_dialogo_cambiar_password(app):
 def mostrar_form_situacion(app, personal_id=None, situacion_id=None):
     from situaciones_irregulares.views.form import SituacionFormView
     
+    permisos = app.permisos_ctrl.obtener_todos()
+    comisiones = app.comisiones_ctrl.obtener_todos()
+    situaciones = app.situaciones_ctrl.obtener_todos()
+    
     def builder():
         form = SituacionFormView(
             controller=app.situaciones_ctrl,
@@ -198,6 +216,9 @@ def mostrar_form_situacion(app, personal_id=None, situacion_id=None):
             on_back=app._go_to_situaciones,
             personal_id=personal_id,
             situacion_id=situacion_id,
+            lista_permisos=permisos,
+            lista_comisiones=comisiones,
+            lista_situaciones=situaciones,
             dark_mode=app.dark_mode,
         )
         app.content_area.content = form

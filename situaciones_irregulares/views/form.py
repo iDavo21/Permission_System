@@ -7,7 +7,7 @@ from personal.models.personal_model import PersonalModel
 
 
 class SituacionFormView(ft.Container):
-    def __init__(self, controller, situacion_id=None, personal_id=None, on_save=None, on_back=None, dark_mode=True):
+    def __init__(self, controller, situacion_id=None, personal_id=None, on_save=None, on_back=None, lista_permisos=None, lista_comisiones=None, lista_situaciones=None, dark_mode=True):
         super().__init__()
         self.expand = True
         self.alignment = ft.Alignment.CENTER
@@ -17,6 +17,9 @@ class SituacionFormView(ft.Container):
         self.on_save = on_save
         self.on_back = on_back
         self.dark_mode = dark_mode
+        self.lista_permisos = lista_permisos or []
+        self.lista_comisiones = lista_comisiones or []
+        self.lista_situaciones = lista_situaciones or []
 
         self.datos_situacion = None
         self.personal_seleccionado = None
@@ -92,7 +95,7 @@ class SituacionFormView(ft.Container):
             label="Fecha de Elaboración",
             icon=ft.Icons.EDIT_DOCUMENT,
             width=W_FULL,
-            value=hoy.strftime("%d/%m/%Y"),
+            value=hoy.strftime(FECHA_FORMAT),
             read_only=True,
             bgcolor=tc["input_bg"],
             border_color=tc["input_border"],
@@ -346,6 +349,42 @@ class SituacionFormView(ft.Container):
             self.page.update()
             return
 
+        from core.validators import verificar_estado_personal
+        
+        if self.personal_seleccionado:
+            conflicto = verificar_estado_personal(
+                self.personal_seleccionado.get("id"), 
+                "situaciones",
+                self.lista_permisos, 
+                self.lista_comisiones, 
+                self.lista_situaciones
+            )
+            if conflicto:
+                nombres = "%s %s" % (self.personal_seleccionado.get("nombres", ""), self.personal_seleccionado.get("apellidos", ""))
+                mensaje = f"{nombres}: {conflicto}\n\n¿Desea guardar de todas formas?"
+                
+                def on_confirmar(e):
+                    self.page.pop_dialog()
+                    self._guardar_situacion()
+                
+                def on_cancelar(e):
+                    self.page.pop_dialog()
+                
+                dlg = ft.AlertDialog(
+                    title=ft.Text("⚠️ Advertencia"),
+                    content=ft.Text(mensaje),
+                    actions=[
+                        ft.TextButton("Cancelar", on_click=on_cancelar),
+                        ft.ElevatedButton("Guardar de todas formas", on_click=on_confirmar),
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+                self.page.show_dialog(dlg)
+                return
+
+        self._guardar_situacion()
+
+    def _guardar_situacion(self):
         datos = {
             "personal_id": self.personal_seleccionado.get("id"),
             "tipo_situacion": self.tipo_situacion.value,
